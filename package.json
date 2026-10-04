@@ -1,8 +1,8 @@
 {
   "name": "auto-day-trader",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
-  "description": "OpenStock fork — Auto Day Trader with Scrapling intake, PricingEngine, and human-approved Alpaca paper trading",
+  "description": "OpenStock fork — swing D1–D5 price forecasts, 100-stock strategy lab; trading UI hidden by default",
   "scripts": {
     "dev": "next dev --turbopack",
     "build": "next build --turbopack",
@@ -11,6 +11,8 @@
     "test:db": "node scripts/test-db.mjs",
     "test": "vitest run",
     "test:watch": "vitest",
+    "strategy-test": "npx tsx scripts/strategy-test-swing.ts",
+    "strategy-test:smoke": "npx tsx scripts/strategy-test-swing.ts --smoke",
     "worker:dev": "cd services/scrapling-worker && uvicorn main:app --reload --port 8091"
   },
   "dependencies": {

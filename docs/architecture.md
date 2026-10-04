@@ -1,81 +1,100 @@
-# Auto Day Trader — Architecture
+# Auto Day Trader — Architecture (prediction-first)
 
-Fork of [OpenStock](https://github.com/Open-Dev-Society/OpenStock) (AGPL-3.0) with human-approved Alpaca paper trading, Scrapling news intake, and a DSA-shaped decision dashboard.
+Fork of [OpenStock](https://github.com/Open-Dev-Society/OpenStock) (AGPL-3.0). **Primary product is swing price prediction (D1/D2/D3/D5)**, not order placement. Alpaca Approve remains in the repo but is hidden by default (`TRADING_UI_ENABLED=false`).
 
 ## Runtime pieces
 
 | Piece | Role |
 |-------|------|
-| **web** (Next.js 15) | OpenStock UI + `/bot` decision dashboard + Approve/Reject trading |
-| **mongodb** | Watchlists, media, pricing, reports, proposals, audit |
-| **scrapling-worker** | Fetch/extract allowlisted article bodies after search-API discovery |
-| **Inngest** | Market-hours loop, market review, proposal notifications (no auto-submit) |
+| **web** (Next.js 15) | OpenStock UI + `/forecasts` + Forecast Lab `/forecasts/lab` |
+| **mongodb** | Watchlists, media, FeatureSnapshots, PriceForecasts, ModelWeights, EvalRuns |
+| **scrapling-worker** | Fetch/extract allowlisted news & press bodies after search-API discovery |
+| **Inngest** | Post-close resolve + weekly strategy test / train (day-trader loop only if trading UI on) |
 
 ```mermaid
 flowchart LR
-  UI[Nextjs_OpenStock_UI] --> API[Next_API_and_Actions]
-  API --> Mongo[(MongoDB)]
-  API --> Finnhub[Finnhub]
-  API --> Alpaca[Alpaca_Trading_API]
-  NewsAPI[News_Search_APIs] --> Scrapers[Scrapling_Python_Worker]
-  Scrapers --> Queue[Ingest_Queue]
-  Queue --> Pricing[PricingEngine]
-  Finnhub --> Pricing
-  Alpaca --> Pricing
-  Pricing --> Analyzer[Gemini_Analysis]
-  Analyzer --> Mongo
-  Analyzer --> UI
-  Analyzer --> Notify[Email_Telegram_Discord]
-  UI -->|Approve_or_Reject| Alpaca
+  Universe[Universe100] --> Features[FeatureBuilder]
+  Finnhub[Finnhub_DailyBars] --> Features
+  News[Tavily_News_Scrapling] --> Features
+  Social[Adanos_Social] --> Features
+  Press[PressRelease_Intake] --> Features
+  Features --> Baseline[TrainableBaseline]
+  Baseline --> Bands[UncertaintyBands]
+  Bands --> Gemini[Gemini_ExplainClamp]
+  Gemini --> Forecast[PriceForecast]
+  Forecast --> Mongo[(MongoDB)]
+  Actuals[RealCloses] --> Eval[StrategyTest]
+  Forecast --> Eval
+  Eval --> Attribution[FactorAttribution]
+  Attribution --> Train[WeightFit]
+  Train --> Baseline
+  Eval --> UI[Forecast_and_Lab_UI]
+  Attribution --> UI
 ```
 
-## Data contracts
+## Product surfaces
 
-- **MediaDocument** — discovered + Scrapling-enriched articles (`database/models/media-document.model.ts`)
-- **PricingSnapshot** — deterministic entry/stop/targets from VWAP/ATR/microstructure/relative/event (`lib/pricing/`)
-- **AnalysisReport** — DSA-shaped score/action/trend/catalysts/risks/checklist (`database/models/analysis-report.model.ts`)
-- **TradeProposal** — priced idea; lifecycle `proposed → approved|rejected → submitted|failed`
-- **OrderAudit** — immutable audit of approvals and submissions
-- **MarketReview** — indices + sector leaders/laggards snapshot
+| Path | Purpose |
+|------|---------|
+| `/forecasts` | Watchlist D1–D5 predicted closes + 80% bands + evidence |
+| `/forecasts/lab` | 100-stock strategy test, predicted vs actual, factor reports, train/promote |
+| `/bot` | Redirects to `/forecasts` unless `TRADING_UI_ENABLED=true` |
 
-## Pricing rule
+## Media channels (all first-class)
 
-`PricingEngine` (`lib/pricing/engine.ts`) is authoritative. Gemini may refine within `entryZone` / target bands via `clampProposalToPricing` — it never invents fill prices from headlines alone.
+| Channel | Discover | Features |
+|---------|----------|----------|
+| **news** | Tavily (+ Brave/SerpAPI fallback) → Scrapling | `newsCount48h`, `newsSentiment`, `newsNovelty` |
+| **social** | Adanos (Reddit/X/Polymarket) when `ADANOS_API_KEY` set; else Tavily discussion snippets at lower weight | `socialSentiment`, `socialVolume`, `socialBullBearSkew`, `polymarketTilt` |
+| **press** | Tavily PR queries + Finnhub/news heuristics → classify → Scrapling allowlist | `pressCount7d`, `pressSentiment`, `pressEventType`, `daysSinceLastPress` |
 
-## Trading safety
+`MediaDocument.channel` is `news` \| `social` \| `press`. Press tilt uses `pressTiltMultiplier` (default 1.5× vs generic news) in `ModelWeights`.
 
-1. Default `ALPACA_MODE=paper`
-2. Live requires `ALPACA_ALLOW_LIVE=true` + UI confirm phrase
-3. Cron / Inngest **only creates proposals and notifies** — never calls `submitOrder`
-4. `approveProposalAction` is the only path to Alpaca; requires explicit click
-5. Kill switch, max position %, max daily proposals, one open proposal per symbol
+## Forecast stack
+
+1. **FeatureSnapshot** — frozen at `asOf` (no lookahead): price + news + social + press
+2. **swing-baseline-vN** — blend + ridge coefficients + calibrated band `k`
+3. **80% bands** — vol-scaled; Gemini may nudge `yHat` only inside `[lo80, hi80]`
+4. **Strategy test** — walk-forward on `config/forecast-universe-100.json` vs real closes
+5. **Factor attribution** — Spearman + grouped ablation (price/news/social/press)
+6. **Train** — ridge refit on train fold; holdout last 20 days; promote if MAPE/direction gate passes
+
+## Pricing vs prediction
+
+- Legacy **PricingEngine** (`lib/pricing/`) remains for optional trading proposals.
+- Prediction path never places orders. Gemini never invents prices outside bands.
 
 ## Key paths
 
 | Path | Purpose |
 |------|---------|
-| `app/(root)/bot` | Decision dashboard |
-| `services/scrapling-worker/` | Python FastAPI + Scrapling |
-| `lib/actions/daytrader.actions.ts` | Intake → price → analyze → propose |
-| `lib/actions/trading.actions.ts` | Approve / Reject / settings |
-| `lib/inngest/daytrader.ts` | Market-hours + pre/post review crons |
-| `lib/alerts/notify.ts` | Email / Telegram / Discord |
+| `config/forecast-universe-100.json` | Fixed 100-name research universe |
+| `lib/forecast/` | Features, media, baseline, strategy test, attribution, train |
+| `lib/actions/forecast.actions.ts` | Server actions for UI + Lab |
+| `scripts/strategy-test-swing.ts` | CLI strategy test |
+| `lib/inngest/forecast.ts` | Post-close + weekly cron |
+
+## Daily bars
+
+`lib/forecast/bars.ts` tries **Finnhub `/stock/candle`** first. Free Finnhub keys often return **403** on candles — then **Alpaca market data** (if keys present) and finally the public **Yahoo chart API**. This is for prediction/research only; no live orders.
+
+## How to run
+
+```bash
+cp .env.example .env   # Finnhub, Gemini, Tavily; ADANOS_API_KEY optional; Alpaca optional for bar fallback
+npm install
+npm test
+npm run strategy-test:smoke   # 5 symbols × 40 days
+npm run strategy-test         # full 100 × 120 days
+npm run dev                   # UI: /forecasts and /forecasts/lab
+```
+
+Compose: `docker compose up --build` → `web:3000`, `mongodb`, `scrapling-worker:8091`.
 
 ## Attribution
 
-- **OpenStock** — Open Dev Society, AGPL-3.0 (this fork remains AGPL)
-- **daily_stock_analysis** — ZhuLinsen, MIT — report/news/notification product patterns adapted (not a code copy of the FastAPI WebUI)
+- **OpenStock** — Open Dev Society, AGPL-3.0
+- **daily_stock_analysis** — ZhuLinsen, MIT — report/news patterns adapted
 - **Scrapling** — D4Vinci — article fetch worker
 
 See `ATTRIBUTION.md`.
-
-## Compose
-
-```bash
-cp .env.example .env   # fill keys
-docker compose up --build
-```
-
-Services: `web:3000`, `mongodb:27017`, `scrapling-worker:8091`.
-
-Without Docker: run Mongo separately, `npm run dev`, and `uvicorn` the worker from `services/scrapling-worker`.

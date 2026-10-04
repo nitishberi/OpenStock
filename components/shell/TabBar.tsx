@@ -3,17 +3,19 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { Bot, LayoutDashboard, Menu, Plus, Star, X } from "lucide-react";
+import { LayoutDashboard, LineChart, Menu, Plus, Star, X } from "lucide-react";
 import { openSearch } from "@/components/SearchCommand";
 import { cn } from "@/lib/utils";
 
-const PINNED = ['/dashboard', '/watchlist', '/bot'];
+const PINNED = ['/dashboard', '/watchlist', '/forecasts'];
 const STORAGE_KEY = 'openstock-tabs';
 const MAX_TABS = 12;
 
 const PAGE_LABELS: Record<string, string> = {
     '/dashboard': 'Overview',
     '/watchlist': 'Watchlist',
+    '/forecasts': 'Forecasts',
+    '/forecasts/lab': 'Forecast Lab',
     '/bot': 'Day Trader',
     '/profile': 'Profile',
 };
@@ -100,7 +102,7 @@ const TabBar = ({ onMenu }: { onMenu: () => void }) => {
                             <Link href={path} aria-current={active ? 'page' : undefined} className="flex min-w-0 flex-1 items-center gap-2 before:absolute before:inset-0 before:content-['']">
                                 {path === '/dashboard' && <LayoutDashboard />}
                                 {path === '/watchlist' && <Star />}
-                                {path === '/bot' && <Bot />}
+                                {(path === '/forecasts' || path === '/forecasts/lab') && <LineChart />}
                                 <span className={cn('tab-label', isStock && 'mono text-[13px]')}>{tabLabel(path)}</span>
                             </Link>
                             {!pinned && (

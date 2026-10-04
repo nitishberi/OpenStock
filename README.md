@@ -46,18 +46,17 @@
 
 OpenStock is an open-source alternative to expensive market platforms. Track real-time prices, watch the whole market, and explore detailed company insights — built openly, for everyone, forever free.
 
-## Auto Day Trader (this fork)
+## Auto Day Trader (this fork) — prediction-first
 
-This repository also ships **Auto Day Trader** features on top of OpenStock:
+Primary product is **swing price prediction (D1/D2/D3/D5)**, not order placement:
 
-- **`/bot` decision dashboard** — DSA-shaped scores/actions (buy/watch/sell), catalysts, risks, checklist
-- **PricingEngine** — deterministic VWAP/ATR entry/stop/targets (`lib/pricing/`); Gemini explains inside bands only
-- **Scrapling worker** — news discovery (Tavily/Brave/SerpAPI) + allowlisted article fetch (`services/scrapling-worker/`)
-- **Alpaca paper trading** — proposals require explicit **Approve / Reject** in the UI; cron never auto-submits
-- **Alerts** — email / Telegram / Discord when a proposal needs approval
-- **Risk guards** — kill switch, max position %, max daily proposals, one open proposal per symbol
+- **`/forecasts`** — watchlist predicted closes + 80% bands (Gemini explains inside bands only)
+- **`/forecasts/lab`** — 100-stock walk-forward strategy test, factor attribution (news/social/press/price), ridge train + holdout promote
+- **Triple media** — Tavily+Scrapling news, Adanos social (graceful degrade), press-release discover/classify
+- **Universe** — `config/forecast-universe-100.json`; CLI `npm run strategy-test` / `strategy-test:smoke`
+- **Trading UI off by default** — set `TRADING_UI_ENABLED=true` to expose legacy `/bot` Approve/Alpaca chrome
 
-Compose stack: `web` + `mongodb` + `scrapling-worker`. See [`.env.example`](./.env.example), [`ATTRIBUTION.md`](./ATTRIBUTION.md), and the project architecture note.
+Compose stack: `web` + `mongodb` + `scrapling-worker`. See [`docs/architecture.md`](./docs/architecture.md), [`.env.example`](./.env.example), and [`ATTRIBUTION.md`](./ATTRIBUTION.md).
 
 > ❤️ **13,000+ people use OpenStock for free.** Help keep it that way: [sponsor from $5 a month](https://github.com/sponsors/ravixalgorithm/sponsorships?frequency=recurring&amount=5), or read [how OpenStock is funded](#sponsors).
 

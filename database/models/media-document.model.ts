@@ -1,6 +1,7 @@
 import { Schema, model, models, type Document, type Model } from 'mongoose';
 
-export type MediaSourceKind = 'tavily' | 'brave' | 'serpapi' | 'rss' | 'finnhub' | 'manual';
+export type MediaSourceKind = 'tavily' | 'brave' | 'serpapi' | 'rss' | 'finnhub' | 'manual' | 'adanos';
+export type MediaChannel = 'news' | 'social' | 'press';
 
 export interface MediaDocumentAttrs {
   symbol?: string;
@@ -8,6 +9,8 @@ export interface MediaDocumentAttrs {
   url: string;
   source: string;
   sourceKind: MediaSourceKind;
+  /** Narrative channel for prediction features / attribution. */
+  channel?: MediaChannel;
   excerpt?: string;
   body?: string;
   publishedAt?: Date;
@@ -29,7 +32,13 @@ const MediaDocumentSchema = new Schema<MediaDocumentDoc>(
     sourceKind: {
       type: String,
       required: true,
-      enum: ['tavily', 'brave', 'serpapi', 'rss', 'finnhub', 'manual'],
+      enum: ['tavily', 'brave', 'serpapi', 'rss', 'finnhub', 'manual', 'adanos'],
+    },
+    channel: {
+      type: String,
+      enum: ['news', 'social', 'press'],
+      default: 'news',
+      index: true,
     },
     excerpt: { type: String },
     body: { type: String },

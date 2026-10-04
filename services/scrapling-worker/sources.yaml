@@ -22,6 +22,12 @@ allowlist:
   - apnews.com
   - bbc.com
   - npr.org
+  # Company press / IR
+  - prnewswire.com
+  - businesswire.com
+  - globenewswire.com
+  - accesswire.com
+  - sec.gov
 
 rss:
   - name: Reuters Business
