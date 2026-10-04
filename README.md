@@ -46,9 +46,23 @@
 
 OpenStock is an open-source alternative to expensive market platforms. Track real-time prices, watch the whole market, and explore detailed company insights — built openly, for everyone, forever free.
 
+## Auto Day Trader (this fork)
+
+This repository also ships **Auto Day Trader** features on top of OpenStock:
+
+- **`/bot` decision dashboard** — DSA-shaped scores/actions (buy/watch/sell), catalysts, risks, checklist
+- **PricingEngine** — deterministic VWAP/ATR entry/stop/targets (`lib/pricing/`); Gemini explains inside bands only
+- **Scrapling worker** — news discovery (Tavily/Brave/SerpAPI) + allowlisted article fetch (`services/scrapling-worker/`)
+- **Alpaca paper trading** — proposals require explicit **Approve / Reject** in the UI; cron never auto-submits
+- **Alerts** — email / Telegram / Discord when a proposal needs approval
+- **Risk guards** — kill switch, max position %, max daily proposals, one open proposal per symbol
+
+Compose stack: `web` + `mongodb` + `scrapling-worker`. See [`.env.example`](./.env.example), [`ATTRIBUTION.md`](./ATTRIBUTION.md), and the project architecture note.
+
 > ❤️ **13,000+ people use OpenStock for free.** Help keep it that way: [sponsor from $5 a month](https://github.com/sponsors/ravixalgorithm/sponsorships?frequency=recurring&amount=5), or read [how OpenStock is funded](#sponsors).
 
-Note: OpenStock is community-built and not a brokerage. Market data may be delayed based on provider rules and your configuration. Nothing here is financial advice.
+Note: OpenStock is community-built and not a brokerage. Market data may be delayed based on provider rules and your configuration. Nothing here is financial advice. Auto Day Trader defaults to **Alpaca paper**; live trading is opt-in and still requires a human Approve click.
+
 
 ## 📋 Table of Contents
 
@@ -197,23 +211,28 @@ You can run OpenStock and MongoDB easily with Docker Compose.
 
 1) Ensure Docker and Docker Compose are installed.
 
-2) docker-compose.yml includes two services:
-- openstock (this app)
+2) docker-compose.yml includes three services:
+- web (Next.js OpenStock + Auto Day Trader)
 - mongodb (MongoDB database with a persistent volume)
+- scrapling-worker (Python Scrapling intake on :8091)
 
 3) Create your `.env` (see examples below). For the Docker setup, use a local connection string like:
 ```env
 MONGODB_URI=mongodb://root:example@mongodb:27017/openstock?authSource=admin
+SCRAPLING_WORKER_URL=http://scrapling-worker:8091
+ALPACA_MODE=paper
 ```
 
 4) Start the stack:
 ```bash
 # from the repository root
-docker compose up -d mongodb && docker compose up -d --build
+docker compose up -d --build
 ```
 
 5) Access the app:
 - App: http://localhost:3000
+- Bot dashboard: http://localhost:3000/bot
+- Scrapling worker health: http://localhost:8091/health
 - MongoDB is available inside the Docker network at host mongodb:27017
 
 Notes
@@ -306,6 +325,24 @@ INNGEST_EVENT_KEY=your_inngest_event_key
 # Email (optional; Nodemailer via Gmail, consider App Passwords if 2FA)
 # NODEMAILER_EMAIL=youraddress@gmail.com
 # NODEMAILER_PASSWORD=your_gmail_app_password
+
+# --- Auto Day Trader ---
+# Alpaca (default paper). Live needs ALPACA_MODE=live + ALPACA_ALLOW_LIVE=true + UI Approve.
+ALPACA_API_KEY_ID=
+ALPACA_API_SECRET_KEY=
+ALPACA_MODE=paper
+ALPACA_ALLOW_LIVE=false
+# News discovery (Tavily primary; Brave / SerpAPI fallback)
+TAVILY_API_KEY=
+BRAVE_API_KEY=
+SERPAPI_API_KEY=
+# Scrapling worker
+SCRAPLING_WORKER_URL=http://localhost:8091
+SCRAPLING_WORKER_TOKEN=change-me
+# Proposal alerts (optional)
+# TELEGRAM_BOT_TOKEN=
+# TELEGRAM_CHAT_ID=
+# DISCORD_WEBHOOK_URL=
 ```
 
 Local (Docker Compose) MongoDB:

@@ -1,0 +1,34 @@
+# Public finance / news domains allowed for Scrapling fetch.
+# Prefer RSS and official APIs. Do not list login-walled private content.
+allowlist:
+  - reuters.com
+  - bloomberg.com
+  - cnbc.com
+  - finance.yahoo.com
+  - marketwatch.com
+  - seekingalpha.com
+  - barrons.com
+  - wsj.com
+  - ft.com
+  - investing.com
+  - benzinga.com
+  - thestreet.com
+  - fool.com
+  - morningstar.com
+  - nasdaq.com
+  - nyse.com
+  - sec.gov
+  - federalreserve.gov
+  - apnews.com
+  - bbc.com
+  - npr.org
+
+rss:
+  - name: Reuters Business
+    url: https://www.reutersagency.com/feed/?taxonomy=best-topics&post_type=best
+  - name: CNBC Top News
+    url: https://www.cnbc.com/id/100003114/device/rss/rss.html
+  - name: MarketWatch Top Stories
+    url: https://feeds.marketwatch.com/marketwatch/topstories/
+  - name: Yahoo Finance
+    url: https://finance.yahoo.com/news/rssindex
