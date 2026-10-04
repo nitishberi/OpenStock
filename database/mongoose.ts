@@ -2,15 +2,23 @@ import mongoose from "mongoose";
 
 const MONGODB_URI = process.env.MONGODB_URI;
 
-// FIX: Set Google DNS and force IPv4 to avoid querySrv ECONNREFUSED
+// Optional DNS tweaks for MongoDB Atlas SRV on some local networks.
+// Never override resolver servers in Docker Compose — that breaks service DNS
+// (hostname `mongodb` is only resolvable via Docker's embedded DNS).
 import dns from 'dns';
 try {
-    // This is often more effective than setServers for Node 17+
     if (dns.setDefaultResultOrder) {
         dns.setDefaultResultOrder('ipv4first');
     }
-    dns.setServers(['8.8.8.8']);
-    console.log('MongoDB: Custom DNS settings applied');
+    const forceGoogleDns = process.env.MONGODB_GOOGLE_DNS === 'true';
+    const isSrv = Boolean(MONGODB_URI?.startsWith('mongodb+srv://'));
+    const looksLikeComposeHost = Boolean(
+        MONGODB_URI && /@mongodb(?::|\/|\?|$)/.test(MONGODB_URI)
+    );
+    if ((forceGoogleDns || isSrv) && !looksLikeComposeHost) {
+        dns.setServers(['8.8.8.8', '1.1.1.1']);
+        console.log('MongoDB: Custom DNS servers applied (Atlas/SRV)');
+    }
 } catch (e) {
     console.error('Failed to set custom DNS:', e);
 }
