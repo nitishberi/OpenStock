@@ -53,7 +53,7 @@ Primary product is **swing price prediction (D1/D2/D3/D5)**, not order placement
 - **`/forecasts`** — watchlist predicted closes + 80% bands (Gemini explains inside bands only)
 - **`/forecasts/lab`** — 100-stock walk-forward strategy test, factor attribution (news/social/press/price), ridge train + holdout promote
 - **Triple media** — Tavily+Scrapling news, Tavily/RSS→Scrapling→VADER social (no Adanos), press-release discover/classify
-- **Universe** — `config/forecast-universe-100.json`; CLI `npm run strategy-test` / `strategy-test:smoke`
+- **Universe** — `config/forecast-universe-100.json`; CLI `npm run strategy-test` / `strategy-test:smoke` / `strategy-test:smoke:live`
 - **Trading UI off by default** — set `TRADING_UI_ENABLED=true` to expose legacy `/bot` Approve/Alpaca chrome
 
 Compose stack: `web` + `mongodb` + `scrapling-worker`. See [`docs/architecture.md`](./docs/architecture.md), [`.env.example`](./.env.example), and [`ATTRIBUTION.md`](./ATTRIBUTION.md).
