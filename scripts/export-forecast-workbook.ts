@@ -78,9 +78,13 @@ async function loadWeightsFromMongo(): Promise<import('../lib/forecast').ModelWe
   const uri = process.env.MONGODB_URI;
   if (!uri) return null;
   try {
-    const { connectToDatabase } = await import('../database/mongoose');
+    const mongoose = (await import('mongoose')).default;
+    // Fast-fail when mongod is not running on this worker.
+    await mongoose.connect(uri, {
+      serverSelectionTimeoutMS: 2500,
+      connectTimeoutMS: 2500,
+    });
     const { ModelWeights } = await import('../database/models/model-weights.model');
-    await connectToDatabase();
     const active = await ModelWeights.findOne({ active: true }).lean();
     if (active?.payload) {
       console.log(`Loaded active Mongo weights: ${(active.payload as { version?: string }).version}`);
@@ -93,6 +97,13 @@ async function loadWeightsFromMongo(): Promise<import('../lib/forecast').ModelWe
     }
   } catch (e) {
     console.warn('Mongo weights unavailable:', e instanceof Error ? e.message : e);
+  } finally {
+    try {
+      const mongoose = (await import('mongoose')).default;
+      if (mongoose.connection.readyState !== 0) await mongoose.disconnect();
+    } catch {
+      /* ignore */
+    }
   }
   return null;
 }
