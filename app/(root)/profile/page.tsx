@@ -4,7 +4,7 @@ import { Bell, KeyRound, ShieldCheck, Star } from "lucide-react";
 import Panel from "@/components/Panel";
 import ProfileForm from "@/components/profile/ProfileForm";
 import PasswordForm from "@/components/profile/PasswordForm";
-import { auth, getSession } from "@/lib/better-auth/auth";
+import { getAuth, getSession } from "@/lib/better-auth/auth";
 import { getUserWatchlist } from "@/lib/actions/watchlist.actions";
 import { getUserAlerts } from "@/lib/actions/alert.actions";
 import { alertsEnabled } from "@/lib/market-data";
@@ -22,6 +22,7 @@ export default async function ProfilePage() {
     if (!session?.user) redirect('/sign-in');
     const { user } = session;
 
+    const auth = await getAuth();
     const [accounts, watchlist, alerts] = await Promise.all([
         auth.api.listUserAccounts({ headers: await headers() }).catch(() => []),
         getUserWatchlist(),

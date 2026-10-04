@@ -68,25 +68,51 @@ const createAuth = (database: MongoDb) => betterAuth({
         plugins: [nextCookies()],
 });
 
-let authInstance: ReturnType<typeof createAuth> | null = null;
+type AuthInstance = ReturnType<typeof createAuth>;
+
+let authInstance: AuthInstance | null = null;
+let authPromise: Promise<AuthInstance> | null = null;
+
+const isProductionBuild =
+    process.env.NEXT_PHASE === 'phase-production-build' ||
+    process.env.NEXT_PHASE === 'phase-export';
 
 export const getAuth = async () => {
     if (authInstance) return authInstance;
 
-    const mongoose = await connectToDatabase();
-    const database = mongoose.connection.db;
-    if (!database) {
-        throw new Error("MongoDB connection not found!");
+    // Avoid connecting to Mongo during `next build` (Docker image build has no mongo hostname).
+    if (isProductionBuild) {
+        throw new Error('Auth is not initialized during production build');
     }
 
-    authInstance = createAuth(database);
-    return authInstance;
+    if (!authPromise) {
+        authPromise = (async () => {
+            const mongoose = await connectToDatabase();
+            const database = mongoose.connection.db;
+            if (!database) {
+                throw new Error("MongoDB connection not found!");
+            }
+            authInstance = createAuth(database);
+            return authInstance;
+        })().catch((err) => {
+            authPromise = null;
+            throw err;
+        });
+    }
+
+    return authPromise;
 }
 
-export const auth = await getAuth();
-
-// One session lookup per request, shared by layouts, pages and actions
-export const getSession = cache(async () => auth.api.getSession({ headers: await headers() }));
+// One session lookup per request, shared by layouts, pages and actions.
+// Soft-fails during build / DB outage so page collection does not hard-crash the Docker build.
+export const getSession = cache(async () => {
+    try {
+        const instance = await getAuth();
+        return instance.api.getSession({ headers: await headers() });
+    } catch {
+        return null;
+    }
+});
 
 // Server actions are public endpoints: never trust a userId sent from the client.
 export const requireUserId = async () => {
