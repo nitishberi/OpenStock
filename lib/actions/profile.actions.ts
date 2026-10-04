@@ -2,7 +2,7 @@
 
 import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
-import { auth } from "@/lib/better-auth/auth";
+import { getAuth } from "@/lib/better-auth/auth";
 import { INVESTMENT_GOALS, PREFERRED_INDUSTRIES, RISK_TOLERANCE_OPTIONS } from "@/lib/constants";
 
 export type ProfileInput = {
@@ -27,6 +27,7 @@ export async function updateProfile(input: ProfileInput) {
     }
 
     try {
+        const auth = await getAuth();
         await auth.api.updateUser({
             headers: await headers(),
             body: {
@@ -47,6 +48,7 @@ export async function updateProfile(input: ProfileInput) {
 
 export async function changePassword({ currentPassword, newPassword }: { currentPassword: string; newPassword: string }) {
     try {
+        const auth = await getAuth();
         await auth.api.changePassword({
             headers: await headers(),
             body: { currentPassword, newPassword, revokeOtherSessions: true },

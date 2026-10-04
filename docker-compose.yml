@@ -1,16 +1,21 @@
 services:
-  openstock:
+  web:
     build:
       context: .
-      extra_hosts:
-        - "mongodb:host-gateway"
+      dockerfile: Dockerfile
     ports:
       - "3000:3000"
     env_file:
       - .env
+    environment:
+      MONGODB_URI: mongodb://root:example@mongodb:27017/openstock?authSource=admin
+      SCRAPLING_WORKER_URL: http://scrapling-worker:8091
     restart: unless-stopped
     depends_on:
-      - mongodb
+      mongodb:
+        condition: service_healthy
+      scrapling-worker:
+        condition: service_started
 
   mongodb:
     image: mongo:7
@@ -28,6 +33,27 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+
+  scrapling-worker:
+    build:
+      context: ./services/scrapling-worker
+      dockerfile: Dockerfile
+    ports:
+      - "8091:8091"
+    environment:
+      SCRAPLING_WORKER_TOKEN: ${SCRAPLING_WORKER_TOKEN:-}
+      MONGODB_URI: mongodb://root:example@mongodb:27017/openstock?authSource=admin
+      MONGODB_DB: openstock
+      WEB_INGEST_URL: http://web:3000/api/media/ingest
+      SOURCES_CONFIG: /app/sources.yaml
+      SCRAPE_RATE_LIMIT_SECONDS: "2"
+      SCRAPLING_STEALTH: "false"
+    volumes:
+      - ./services/scrapling-worker/sources.yaml:/app/sources.yaml:ro
+    restart: unless-stopped
+    depends_on:
+      mongodb:
+        condition: service_healthy
 
 volumes:
   mongo-data:

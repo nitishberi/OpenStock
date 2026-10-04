@@ -3,11 +3,12 @@
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
-import { BookOpen, Code2, Heart, Info, LayoutDashboard, LifeBuoy, LogOut, Search, Star } from "lucide-react";
+import { BookOpen, Bot, Code2, Heart, Info, LayoutDashboard, LifeBuoy, LogOut, LineChart, Search, Star } from "lucide-react";
 import { openSearch } from "@/components/SearchCommand";
 import { signOut } from "@/lib/actions/auth.actions";
 import { cn } from "@/lib/utils";
 import { SIDEBAR_SPONSOR_SLOTS, sidebarSponsors } from "@/lib/sponsors";
+import { tradingUiEnabled } from "@/lib/forecast/flags";
 
 type SidebarProps = {
     user: User;
@@ -52,6 +53,17 @@ const Sidebar = ({ user, watchlist }: SidebarProps) => {
                     <Star /> <span className="flex-1">Watchlist</span>
                     <span className="num text-xs text-faint">{watchlist.length}</span>
                 </Link>
+                <Link
+                    href="/forecasts"
+                    className={cn('side-item', (pathname === '/forecasts' || pathname?.startsWith('/forecasts/')) && 'is-active')}
+                >
+                    <LineChart /> Forecasts
+                </Link>
+                {tradingUiEnabled && (
+                    <Link href="/bot" className={cn('side-item', pathname === '/bot' && 'is-active')}>
+                        <Bot /> Day Trader
+                    </Link>
+                )}
             </nav>
 
             <div className="flex min-h-0 flex-col gap-1">

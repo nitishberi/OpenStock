@@ -5,6 +5,9 @@ import DonatePopup from "@/components/DonatePopup";
 import { searchStocks } from "@/lib/actions/finnhub.actions";
 import { getUserWatchlist } from "@/lib/actions/watchlist.actions";
 
+// Authenticated app shell needs a live session/DB — never statically prerender.
+export const dynamic = 'force-dynamic';
+
 const Layout = async ({ children }: { children: React.ReactNode }) => {
     const session = await getSession();
 

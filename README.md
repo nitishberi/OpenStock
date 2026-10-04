@@ -46,9 +46,22 @@
 
 OpenStock is an open-source alternative to expensive market platforms. Track real-time prices, watch the whole market, and explore detailed company insights — built openly, for everyone, forever free.
 
+## Auto Day Trader (this fork) — prediction-first
+
+Primary product is **swing price prediction (D1/D2/D3/D5)**, not order placement:
+
+- **`/forecasts`** — watchlist predicted closes + 80% bands (Gemini explains inside bands only)
+- **`/forecasts/lab`** — 100-stock walk-forward strategy test, factor attribution (news/social/press/price), ridge train + holdout promote
+- **Triple media** — Tavily+Scrapling news, Tavily/RSS→Scrapling→VADER social (no Adanos), press-release discover/classify
+- **Universe** — `config/forecast-universe-100.json`; CLI `npm run strategy-test` / `strategy-test:smoke` / `strategy-test:smoke:live`
+- **Trading UI off by default** — set `TRADING_UI_ENABLED=true` to expose legacy `/bot` Approve/Alpaca chrome
+
+Compose stack: `web` + `mongodb` + `scrapling-worker`. See [`docs/architecture.md`](./docs/architecture.md), [`.env.example`](./.env.example), and [`ATTRIBUTION.md`](./ATTRIBUTION.md).
+
 > ❤️ **13,000+ people use OpenStock for free.** Help keep it that way: [sponsor from $5 a month](https://github.com/sponsors/ravixalgorithm/sponsorships?frequency=recurring&amount=5), or read [how OpenStock is funded](#sponsors).
 
-Note: OpenStock is community-built and not a brokerage. Market data may be delayed based on provider rules and your configuration. Nothing here is financial advice.
+Note: OpenStock is community-built and not a brokerage. Market data may be delayed based on provider rules and your configuration. Nothing here is financial advice. Auto Day Trader defaults to **Alpaca paper**; live trading is opt-in and still requires a human Approve click.
+
 
 ## 📋 Table of Contents
 
@@ -197,23 +210,28 @@ You can run OpenStock and MongoDB easily with Docker Compose.
 
 1) Ensure Docker and Docker Compose are installed.
 
-2) docker-compose.yml includes two services:
-- openstock (this app)
+2) docker-compose.yml includes three services:
+- web (Next.js OpenStock + Auto Day Trader)
 - mongodb (MongoDB database with a persistent volume)
+- scrapling-worker (Python Scrapling intake on :8091)
 
 3) Create your `.env` (see examples below). For the Docker setup, use a local connection string like:
 ```env
 MONGODB_URI=mongodb://root:example@mongodb:27017/openstock?authSource=admin
+SCRAPLING_WORKER_URL=http://scrapling-worker:8091
+ALPACA_MODE=paper
 ```
 
 4) Start the stack:
 ```bash
 # from the repository root
-docker compose up -d mongodb && docker compose up -d --build
+docker compose up -d --build
 ```
 
 5) Access the app:
 - App: http://localhost:3000
+- Bot dashboard: http://localhost:3000/bot
+- Scrapling worker health: http://localhost:8091/health
 - MongoDB is available inside the Docker network at host mongodb:27017
 
 Notes
@@ -267,8 +285,9 @@ BETTER_AUTH_URL=http://localhost:3000
 NEXT_PUBLIC_FINNHUB_API_KEY=your_finnhub_key
 FINNHUB_BASE_URL=https://finnhub.io/api/v1
 
-# Sentiment insights (optional)
-ADANOS_API_KEY=your_adanos_api_key
+# Social for forecasts: Tavily + public RSS + Scrapling + local VADER (no Adanos key required)
+# Optional legacy stock-page Adanos card only:
+# ADANOS_API_KEY=your_adanos_api_key
 # ADANOS_API_BASE_URL=https://api.adanos.org
 
 # AI Provider (optional, default: "gemini")
@@ -306,6 +325,24 @@ INNGEST_EVENT_KEY=your_inngest_event_key
 # Email (optional; Nodemailer via Gmail, consider App Passwords if 2FA)
 # NODEMAILER_EMAIL=youraddress@gmail.com
 # NODEMAILER_PASSWORD=your_gmail_app_password
+
+# --- Auto Day Trader ---
+# Alpaca (default paper). Live needs ALPACA_MODE=live + ALPACA_ALLOW_LIVE=true + UI Approve.
+ALPACA_API_KEY_ID=
+ALPACA_API_SECRET_KEY=
+ALPACA_MODE=paper
+ALPACA_ALLOW_LIVE=false
+# News discovery (Tavily primary; Brave / SerpAPI fallback)
+TAVILY_API_KEY=
+BRAVE_API_KEY=
+SERPAPI_API_KEY=
+# Scrapling worker
+SCRAPLING_WORKER_URL=http://localhost:8091
+SCRAPLING_WORKER_TOKEN=change-me
+# Proposal alerts (optional)
+# TELEGRAM_BOT_TOKEN=
+# TELEGRAM_CHAT_ID=
+# DISCORD_WEBHOOK_URL=
 ```
 
 Local (Docker Compose) MongoDB:
@@ -325,8 +362,9 @@ BETTER_AUTH_URL=http://localhost:3000
 NEXT_PUBLIC_FINNHUB_API_KEY=your_finnhub_key
 FINNHUB_BASE_URL=https://finnhub.io/api/v1
 
-# Sentiment insights (optional)
-ADANOS_API_KEY=your_adanos_api_key
+# Social for forecasts: Tavily + public RSS + Scrapling + local VADER (no Adanos key required)
+# Optional legacy stock-page Adanos card only:
+# ADANOS_API_KEY=your_adanos_api_key
 # ADANOS_API_BASE_URL=https://api.adanos.org
 
 # AI Provider (optional, default: "gemini")
@@ -419,10 +457,15 @@ public/assets/images/   # logos and screenshots
     - Set `NEXT_PUBLIC_FINNHUB_API_KEY` and `FINNHUB_BASE_URL` (default: https://finnhub.io/api/v1).
     - Free tiers may return delayed quotes; respect rate limits and terms.
 
-- Adanos sentiment insights (optional)
-    - Structured stock sentiment snapshots across Reddit, X.com, news, and Polymarket.
-    - Set `ADANOS_API_KEY`; optionally override the API host with `ADANOS_API_BASE_URL`.
-    - Used only for the stock detail sentiment card and does not replace Finnhub or TradingView.
+- Forecast social intake (locked)
+    - Discover: Tavily discussion queries + public Reddit RSS.
+    - Fetch: Scrapling on allowlisted public URLs only (no login walls).
+    - Score: local VADER (+ finance lexicon blend) → `socialSentiment` / `socialVolume` / `socialBullBearSkew`.
+    - **No Adanos key required** for prediction.
+
+- Adanos sentiment insights (optional legacy)
+    - Stock detail sentiment card only (not used by forecast FeatureSnapshot).
+    - Set `ADANOS_API_KEY` if you want that card; forecasts ignore it.
 
 - TradingView
     - Embeddable widgets used for charts, heatmap, quotes, and timelines.
