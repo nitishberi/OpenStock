@@ -9,9 +9,14 @@ import { OrderAudit } from '@/database/models/order-audit.model';
 
 export async function getOrCreateTradingSettings(userId: string) {
   await connectToDatabase();
-  let settings = await TradingSettings.findOne({ userId });
+  // Upsert avoids E11000 when /bot loads dashboard + Alpaca settings in parallel.
+  const settings = await TradingSettings.findOneAndUpdate(
+    { userId },
+    { $setOnInsert: { userId } },
+    { upsert: true, new: true, setDefaultsOnInsert: true }
+  );
   if (!settings) {
-    settings = await TradingSettings.create({ userId });
+    throw new Error('Failed to load trading settings');
   }
   return settings;
 }
