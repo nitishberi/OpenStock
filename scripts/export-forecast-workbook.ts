@@ -11,7 +11,7 @@
  */
 
 import { config } from 'dotenv';
-import { mkdirSync, writeFileSync } from 'fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
 import { dirname, resolve } from 'path';
 import ExcelJS from 'exceljs';
 
@@ -22,6 +22,8 @@ const DEFAULT_OUT =
   '/cursor/stores/bc-01a105ad-9570-7e37-ab99-7b946307cee4/docs/exports/forecast-50-stocks-d1d5.xlsx';
 const DEFAULT_README =
   '/cursor/stores/bc-01a105ad-9570-7e37-ab99-7b946307cee4/docs/exports/forecast-50-stocks-readme.md';
+const WEIGHTS_CACHE =
+  '/cursor/stores/bc-01a105ad-9570-7e37-ab99-7b946307cee4/artifacts/swing-baseline-v2.weights.json';
 
 const SEED_DEFAULT = 42;
 const COUNT_DEFAULT = 50;
@@ -142,18 +144,49 @@ async function trainOfflineCandidate(): Promise<import('../lib/forecast').ModelW
   return null;
 }
 
+function loadCachedWeights(): import('../lib/forecast').ModelWeightsPayload | null {
+  try {
+    if (!existsSync(WEIGHTS_CACHE)) return null;
+    const parsed = JSON.parse(readFileSync(WEIGHTS_CACHE, 'utf8')) as import('../lib/forecast').ModelWeightsPayload;
+    if (parsed?.version && parsed?.coefficients && parsed?.blend) {
+      console.log(`Loaded cached weights: ${parsed.version} from ${WEIGHTS_CACHE}`);
+      return parsed;
+    }
+  } catch (e) {
+    console.warn('Weights cache unreadable:', e instanceof Error ? e.message : e);
+  }
+  return null;
+}
+
+function saveCachedWeights(weights: import('../lib/forecast').ModelWeightsPayload) {
+  try {
+    mkdirSync(dirname(WEIGHTS_CACHE), { recursive: true });
+    writeFileSync(WEIGHTS_CACHE, JSON.stringify(weights, null, 2), 'utf8');
+    console.log(`Cached weights → ${WEIGHTS_CACHE}`);
+  } catch (e) {
+    console.warn('Could not cache weights:', e instanceof Error ? e.message : e);
+  }
+}
+
 async function resolveWeights(): Promise<{
   weights: import('../lib/forecast').ModelWeightsPayload;
   source: string;
 }> {
   const fromMongo = await loadWeightsFromMongo();
   if (fromMongo) {
+    if (fromMongo.version.includes('v2')) saveCachedWeights(fromMongo);
     return { weights: fromMongo, source: 'mongodb-active' };
+  }
+
+  const cached = loadCachedWeights();
+  if (cached) {
+    return { weights: cached, source: 'project-store-cache' };
   }
 
   try {
     const trained = await trainOfflineCandidate();
     if (trained) {
+      saveCachedWeights(trained);
       return {
         weights: trained,
         source: trained.version === 'swing-baseline-v2' ? 'offline-train-v2' : `offline-train-${trained.version}`,
