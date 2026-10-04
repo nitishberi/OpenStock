@@ -334,7 +334,8 @@ async function main() {
             forecasts: preds,
             evidenceUrls,
           });
-          await sleep(400);
+          // Stay under Gemini RPM when exporting many symbols.
+          await sleep(1500);
         } catch (e) {
           console.warn(`Gemini explain failed for ${symbol}`, e);
         }
