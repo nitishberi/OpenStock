@@ -36,7 +36,7 @@ export interface RelativeContext {
 
 export interface EventContext {
   hasCatalyst?: boolean;
-  eventPremiumMultiplier?: number; // e.g. 1.0–1.5 from Adanos/Polymarket
+  eventPremiumMultiplier?: number; // e.g. 1.0–1.5 from narrative/media tilt
   headlineCount?: number;
 }
 

@@ -3,7 +3,7 @@
  * Full page bodies are fetched by the Scrapling worker — not here.
  */
 
-export type DiscoveryProvider = 'tavily' | 'brave' | 'serpapi';
+export type DiscoveryProvider = 'tavily' | 'brave' | 'serpapi' | 'rss';
 
 export interface DiscoveredArticle {
   title: string;

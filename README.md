@@ -52,7 +52,7 @@ Primary product is **swing price prediction (D1/D2/D3/D5)**, not order placement
 
 - **`/forecasts`** — watchlist predicted closes + 80% bands (Gemini explains inside bands only)
 - **`/forecasts/lab`** — 100-stock walk-forward strategy test, factor attribution (news/social/press/price), ridge train + holdout promote
-- **Triple media** — Tavily+Scrapling news, Adanos social (graceful degrade), press-release discover/classify
+- **Triple media** — Tavily+Scrapling news, Tavily/RSS→Scrapling→VADER social (no Adanos), press-release discover/classify
 - **Universe** — `config/forecast-universe-100.json`; CLI `npm run strategy-test` / `strategy-test:smoke`
 - **Trading UI off by default** — set `TRADING_UI_ENABLED=true` to expose legacy `/bot` Approve/Alpaca chrome
 
@@ -285,8 +285,9 @@ BETTER_AUTH_URL=http://localhost:3000
 NEXT_PUBLIC_FINNHUB_API_KEY=your_finnhub_key
 FINNHUB_BASE_URL=https://finnhub.io/api/v1
 
-# Sentiment insights (optional)
-ADANOS_API_KEY=your_adanos_api_key
+# Social for forecasts: Tavily + public RSS + Scrapling + local VADER (no Adanos key required)
+# Optional legacy stock-page Adanos card only:
+# ADANOS_API_KEY=your_adanos_api_key
 # ADANOS_API_BASE_URL=https://api.adanos.org
 
 # AI Provider (optional, default: "gemini")
@@ -361,8 +362,9 @@ BETTER_AUTH_URL=http://localhost:3000
 NEXT_PUBLIC_FINNHUB_API_KEY=your_finnhub_key
 FINNHUB_BASE_URL=https://finnhub.io/api/v1
 
-# Sentiment insights (optional)
-ADANOS_API_KEY=your_adanos_api_key
+# Social for forecasts: Tavily + public RSS + Scrapling + local VADER (no Adanos key required)
+# Optional legacy stock-page Adanos card only:
+# ADANOS_API_KEY=your_adanos_api_key
 # ADANOS_API_BASE_URL=https://api.adanos.org
 
 # AI Provider (optional, default: "gemini")
@@ -455,10 +457,15 @@ public/assets/images/   # logos and screenshots
     - Set `NEXT_PUBLIC_FINNHUB_API_KEY` and `FINNHUB_BASE_URL` (default: https://finnhub.io/api/v1).
     - Free tiers may return delayed quotes; respect rate limits and terms.
 
-- Adanos sentiment insights (optional)
-    - Structured stock sentiment snapshots across Reddit, X.com, news, and Polymarket.
-    - Set `ADANOS_API_KEY`; optionally override the API host with `ADANOS_API_BASE_URL`.
-    - Used only for the stock detail sentiment card and does not replace Finnhub or TradingView.
+- Forecast social intake (locked)
+    - Discover: Tavily discussion queries + public Reddit RSS.
+    - Fetch: Scrapling on allowlisted public URLs only (no login walls).
+    - Score: local VADER (+ finance lexicon blend) → `socialSentiment` / `socialVolume` / `socialBullBearSkew`.
+    - **No Adanos key required** for prediction.
+
+- Adanos sentiment insights (optional legacy)
+    - Stock detail sentiment card only (not used by forecast FeatureSnapshot).
+    - Set `ADANOS_API_KEY` if you want that card; forecasts ignore it.
 
 - TradingView
     - Embeddable widgets used for charts, heatmap, quotes, and timelines.

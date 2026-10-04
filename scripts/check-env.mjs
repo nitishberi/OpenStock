@@ -50,8 +50,8 @@ const optionalVars = {
     // AI Providers (for Inngest workflows)
     'GEMINI_API_KEY': 'Google Gemini API key (for AI-powered welcome emails and news summaries)',
 
-    // Adanos sentiment insights (optional alternative data source)
-    'ADANOS_API_KEY': 'Adanos API key for stock sentiment insights (Reddit, X.com, news, Polymarket)',
+    // Legacy stock-page Adanos card only (optional). Forecast social = Tavily/RSS/Scrapling/VADER — no Adanos.
+    'ADANOS_API_KEY': 'Optional legacy stock sentiment card only; not used by forecast social channel',
     'ADANOS_API_BASE_URL': 'Adanos API base URL override (default: https://api.adanos.org)',
 
     // MiniMax (optional AI provider fallback)

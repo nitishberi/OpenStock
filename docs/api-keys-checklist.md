@@ -15,8 +15,9 @@ Verified in this environment without live secrets:
 | MongoDB | `MONGODB_URI` | Compose provides local |
 | Quotes / candles | `NEXT_PUBLIC_FINNHUB_API_KEY` or `FINNHUB_API_KEYS` | Core market data |
 | AI decision report | `GEMINI_API_KEY` (or MiniMax/Siray) | Falls back to heuristic draft if missing |
-| News discovery | `TAVILY_API_KEY` and/or `BRAVE_API_KEY` / `SERPAPI_API_KEY` | Finnhub company-news used as fallback |
-| Scrapling bodies | Worker up + optional `SCRAPLING_WORKER_TOKEN` | Without worker, discovery metadata still stored |
+| News discovery | `TAVILY_API_KEY` and/or `BRAVE_API_KEY` / `SERPAPI_API_KEY` | Finnhub company-news used as backup |
+| Social discovery | same Tavily key + public RSS | Scrapling on allowlisted public URLs; local VADER — **no Adanos** |
+| Scrapling bodies | Worker up + optional `SCRAPLING_WORKER_TOKEN` | Without worker, discovery snippets still score |
 | Alpaca paper | `ALPACA_API_KEY_ID`, `ALPACA_API_SECRET_KEY`, `ALPACA_MODE=paper` | Approve still works but submit fails without keys |
 | Email alerts | `NODEMAILER_EMAIL`, `NODEMAILER_PASSWORD` | Optional |
 | Telegram | `TELEGRAM_BOT_TOKEN`, chat id | Optional |

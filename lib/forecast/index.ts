@@ -4,6 +4,8 @@ export * from './universe';
 export * from './calendar';
 export * from './bars';
 export * from './features';
+export * from './sentiment';
+export * from './social-discover';
 export * from './media';
 export * from './weights';
 export * from './baseline';

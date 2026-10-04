@@ -9,7 +9,6 @@ import {
 type LabData = {
   activeVersion: string;
   universeCount: number;
-  adanosConfigured: boolean;
   evals: Array<{
     _id: string;
     modelVersion: string;
@@ -138,11 +137,10 @@ export default function ForecastLabClient({ data }: { data: LabData }) {
         </div>
       </header>
 
-      {!lab.adanosConfigured && (
-        <p className="rounded-lg bg-amber-500/10 px-3 py-2 text-sm text-amber-100">
-          ADANOS_API_KEY is not set — social features degrade to Tavily discussion snippets (lower weight).
-        </p>
-      )}
+      <p className="text-xs text-muted-foreground">
+        Social channel uses Tavily/RSS discovery → Scrapling on public allowlisted URLs → local VADER (no paid social
+        API).
+      </p>
 
       {error && <p className="rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-300">{error}</p>}
       {msg && <p className="rounded-lg bg-emerald-500/10 px-3 py-2 text-sm text-emerald-100">{msg}</p>}

@@ -16,3 +16,7 @@ We did **not** replace the OpenStock UI with DSA’s FastAPI WebUI. Strategy len
 ## Scrapling
 
 Article HTML fetch/extract uses [Scrapling](https://github.com/D4Vinci/Scrapling) in `services/scrapling-worker/`.
+
+## vader-sentiment
+
+Local polarity for news/social/press features uses [vader-sentiment](https://www.npmjs.com/package/vader-sentiment) (Apache-2.0) with a small finance lexicon blend in `lib/forecast/sentiment.ts`.

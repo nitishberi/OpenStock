@@ -28,6 +28,9 @@ allowlist:
   - globenewswire.com
   - accesswire.com
   - sec.gov
+  # Public social / discussion (no login walls — skip X/Twitter auth pages)
+  - reddit.com
+  - stocktwits.com
 
 rss:
   - name: Reuters Business
@@ -38,3 +41,12 @@ rss:
     url: https://feeds.marketwatch.com/marketwatch/topstories/
   - name: Yahoo Finance
     url: https://finance.yahoo.com/news/rssindex
+  # Public subreddit Atom feeds (ticker filter applied in app discovery)
+  - name: r/stocks
+    url: https://www.reddit.com/r/stocks/.rss
+  - name: r/investing
+    url: https://www.reddit.com/r/investing/.rss
+  - name: r/StockMarket
+    url: https://www.reddit.com/r/StockMarket/.rss
+  - name: r/wallstreetbets
+    url: https://www.reddit.com/r/wallstreetbets/.rss

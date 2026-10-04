@@ -8,16 +8,16 @@ Fork of [OpenStock](https://github.com/Open-Dev-Society/OpenStock) (AGPL-3.0). *
 |-------|------|
 | **web** (Next.js 15) | OpenStock UI + `/forecasts` + Forecast Lab `/forecasts/lab` |
 | **mongodb** | Watchlists, media, FeatureSnapshots, PriceForecasts, ModelWeights, EvalRuns |
-| **scrapling-worker** | Fetch/extract allowlisted news & press bodies after search-API discovery |
+| **scrapling-worker** | Fetch/extract allowlisted news, social, and press bodies after discovery |
 | **Inngest** | Post-close resolve + weekly strategy test / train (day-trader loop only if trading UI on) |
 
 ```mermaid
 flowchart LR
   Universe[Universe100] --> Features[FeatureBuilder]
   Finnhub[Finnhub_DailyBars] --> Features
-  News[Tavily_News_Scrapling] --> Features
-  Social[Adanos_Social] --> Features
-  Press[PressRelease_Intake] --> Features
+  News[Tavily_RSS_Scrapling] --> Features
+  Social[Tavily_Social_Scrapling] --> Features
+  Press[Press_Scrapling] --> Features
   Features --> Baseline[TrainableBaseline]
   Baseline --> Bands[UncertaintyBands]
   Bands --> Gemini[Gemini_ExplainClamp]
@@ -42,13 +42,13 @@ flowchart LR
 
 ## Media channels (all first-class)
 
-| Channel | Discover | Features |
-|---------|----------|----------|
-| **news** | Tavily (+ Brave/SerpAPI fallback) → Scrapling | `newsCount48h`, `newsSentiment`, `newsNovelty` |
-| **social** | Adanos (Reddit/X/Polymarket) when `ADANOS_API_KEY` set; else Tavily discussion snippets at lower weight | `socialSentiment`, `socialVolume`, `socialBullBearSkew`, `polymarketTilt` |
+| Channel | Discover → fetch → score | Features |
+|---------|--------------------------|----------|
+| **news** | Tavily (+ Brave/SerpAPI) → Scrapling → VADER/lexicon | `newsCount48h`, `newsSentiment`, `newsNovelty` |
+| **social** | Tavily discussion queries + public RSS → Scrapling on allowlisted public URLs → local VADER (**no Adanos**, no login walls) | `socialSentiment`, `socialVolume`, `socialBullBearSkew` |
 | **press** | Tavily PR queries + Finnhub/news heuristics → classify → Scrapling allowlist | `pressCount7d`, `pressSentiment`, `pressEventType`, `daysSinceLastPress` |
 
-`MediaDocument.channel` is `news` \| `social` \| `press`. Press tilt uses `pressTiltMultiplier` (default 1.5× vs generic news) in `ModelWeights`.
+`MediaDocument.channel` is `news` \| `social` \| `press`. Press tilt uses `pressTiltMultiplier` (default 1.5× vs generic news) in `ModelWeights`. Social allowlist includes public Reddit / StockTwits / finance discussion hosts; X/Twitter login walls are skipped.
 
 ## Forecast stack
 
@@ -70,6 +70,8 @@ flowchart LR
 |------|---------|
 | `config/forecast-universe-100.json` | Fixed 100-name research universe |
 | `lib/forecast/` | Features, media, baseline, strategy test, attribution, train |
+| `lib/forecast/social-discover.ts` | Tavily + public RSS social discovery (allowlist / login-wall filter) |
+| `lib/forecast/sentiment.ts` | Local VADER + finance lexicon polarity |
 | `lib/actions/forecast.actions.ts` | Server actions for UI + Lab |
 | `scripts/strategy-test-swing.ts` | CLI strategy test |
 | `lib/inngest/forecast.ts` | Post-close + weekly cron |
@@ -81,7 +83,7 @@ flowchart LR
 ## How to run
 
 ```bash
-cp .env.example .env   # Finnhub, Gemini, Tavily; ADANOS_API_KEY optional; Alpaca optional for bar fallback
+cp .env.example .env   # Finnhub, Gemini, Tavily; Scrapling worker for bodies; Alpaca optional for bar fallback
 npm install
 npm test
 npm run strategy-test:smoke   # 5 symbols × 40 days
@@ -96,5 +98,6 @@ Compose: `docker compose up --build` → `web:3000`, `mongodb`, `scrapling-worke
 - **OpenStock** — Open Dev Society, AGPL-3.0
 - **daily_stock_analysis** — ZhuLinsen, MIT — report/news patterns adapted
 - **Scrapling** — D4Vinci — article fetch worker
+- **vader-sentiment** — local polarity for media features
 
 See `ATTRIBUTION.md`.

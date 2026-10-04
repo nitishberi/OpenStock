@@ -1,5 +1,6 @@
 /**
- * Triple media intake: news (Tavily+Scrapling), social (Adanos), press (discover/classify).
+ * Triple media intake: news (Tavily+Scrapling), social (Tavily/RSS → Scrapling → VADER),
+ * press (discover/classify). No Adanos / paid social APIs. No login-wall scrapes.
  * Each channel writes normalized MediaDocuments and contributes FeatureSnapshot fields.
  */
 
@@ -11,6 +12,8 @@ import {
   emptySocialFeatures,
   pressEventScore,
 } from './features';
+import { bullBearSkew, scorePolarity } from './sentiment';
+import { discoverSocialForSymbol, isPublicSocialUrl } from './social-discover';
 import type { MediaChannel, NewsFeatures, PressEventType, PressFeatures, SocialFeatures } from './types';
 
 const PRESS_DOMAIN_HINTS = [
@@ -31,22 +34,6 @@ function domainOf(url: string): string {
   } catch {
     return 'unknown';
   }
-}
-
-function simpleSentiment(text: string): number {
-  const t = text.toLowerCase();
-  const pos = (
-    t.match(
-      /\b(beat|beats|surge|surges|rally|gain|gains|growth|record|strong|upgrade|outperform|bullish|profit|raise|raises)\b/g
-    ) || []
-  ).length;
-  const neg = (
-    t.match(
-      /\b(miss|misses|fall|falls|drop|drops|weak|downgrade|lawsuit|probe|cut|cuts|bearish|loss|decline|recall)\b/g
-    ) || []
-  ).length;
-  if (pos + neg === 0) return 0;
-  return (pos - neg) / (pos + neg);
 }
 
 export function classifyPressHeuristic(input: {
@@ -169,79 +156,86 @@ function noveltyScore(articles: DiscoveredArticle[]): number {
   return Math.min(1, domains.size / articles.length + 0.2);
 }
 
-/** Social via Adanos; graceful degrade when key missing. Optional Tavily social fallback. */
-export async function collectSocialFeatures(symbol: string): Promise<{
+/**
+ * Social channel (locked): Tavily + public RSS discovery → Scrapling on allowlisted
+ * public URLs → local VADER (finance-lexicon blend) → socialSentiment / socialVolume /
+ * socialBullBearSkew. Never uses Adanos or login-walled hosts.
+ */
+export async function collectSocialFeatures(
+  symbol: string,
+  opts?: { enrichBodies?: boolean }
+): Promise<{
   features: SocialFeatures;
   evidenceUrls: string[];
-  degraded: boolean;
+  documents: MediaIntakeResult['documents'];
 }> {
-  if (process.env.ADANOS_API_KEY) {
+  const sym = symbol.toUpperCase();
+  let articles: DiscoveredArticle[] = [];
+  try {
+    articles = await discoverSocialForSymbol(sym, { max: 8 });
+  } catch (e) {
+    console.warn('social discovery failed', e);
+  }
+  articles = articles.filter((a) => isPublicSocialUrl(a.url));
+
+  const bodyByUrl = new Map<string, string>();
+  if (opts?.enrichBodies && isScraplingConfigured() && articles.length > 0) {
     try {
-      const { getStockSentimentInsights } = await import('@/lib/actions/adanos.actions');
-      const insights = await getStockSentimentInsights(symbol, 7);
-      if (insights && insights.availableSources > 0) {
-        const socialSources = insights.sources.filter((s) => s.source === 'reddit' || s.source === 'x');
-        const poly = insights.sources.find((s) => s.source === 'polymarket');
-        const bull =
-          socialSources.length > 0
-            ? socialSources.reduce((a, s) => a + (s.bullishPct ?? 50), 0) / socialSources.length
-            : insights.bullishAverage ?? 50;
-        const vol =
-          socialSources.reduce((a, s) => a + (s.metricValue || 0), 0) /
-          Math.max(1, socialSources.length);
-        return {
-          features: {
-            socialSentiment: (bull - 50) / 50, // [-1,1]
-            socialVolume: Math.min(1, vol / 100),
-            socialBullBearSkew: (bull - 50) / 50,
-            polymarketTilt: poly?.bullishPct != null ? (poly.bullishPct - 50) / 50 : 0,
-          },
-          evidenceUrls: [],
-          degraded: false,
-        };
+      const scraped = await ingestArticlesWithScrapling({
+        symbol: sym,
+        articles: articles.slice(0, 6).map((a) => ({
+          title: a.title,
+          url: a.url,
+          snippet: a.snippet,
+          provider: a.provider,
+          score: a.score,
+        })),
+      });
+      for (const s of scraped) {
+        if (s.body) bodyByUrl.set(s.url, s.body);
       }
     } catch (e) {
-      console.warn('Adanos social failed', e);
+      console.warn('social scrapling enrich skipped', e);
     }
   }
 
-  // Fallback: Tavily social-scoped snippets (lower weight — caller keeps features as-is)
-  const key = process.env.TAVILY_API_KEY || process.env.TAVILY_API_KEYS?.split(',')[0]?.trim();
-  if (!key) {
-    return { features: emptySocialFeatures(), evidenceUrls: [], degraded: true };
+  if (articles.length === 0) {
+    return { features: emptySocialFeatures(), evidenceUrls: [], documents: [] };
   }
-  try {
-    const res = await fetch('https://api.tavily.com/search', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        api_key: key,
-        query: `${symbol} stock reddit OR twitter OR "wallstreetbets" discussion`,
-        search_depth: 'basic',
-        max_results: 5,
-        topic: 'general',
-      }),
-      signal: AbortSignal.timeout(15_000),
+
+  const scores: number[] = [];
+  const evidenceUrls: string[] = [];
+  const documents: MediaIntakeResult['documents'] = [];
+
+  for (const a of articles) {
+    const body = bodyByUrl.get(a.url);
+    const text = `${a.title} ${body?.slice(0, 2000) || a.snippet || ''}`;
+    scores.push(scorePolarity(text));
+    evidenceUrls.push(a.url);
+    documents.push({
+      channel: 'social',
+      title: a.title,
+      url: a.url,
+      source: a.source || domainOf(a.url),
+      sourceKind: a.provider,
+      excerpt: body?.slice(0, 1200) || a.snippet,
+      domain: domainOf(a.url),
+      tags: ['social', body ? 'scrapling' : 'snippet'],
+      score: a.score,
     });
-    if (!res.ok) return { features: emptySocialFeatures(), evidenceUrls: [], degraded: true };
-    const data = await res.json();
-    const results = (data.results || []) as Array<{ title?: string; url?: string; content?: string }>;
-    const texts = results.map((r) => `${r.title || ''} ${r.content || ''}`);
-    const sent =
-      texts.length > 0 ? texts.reduce((a, t) => a + simpleSentiment(t), 0) / texts.length : 0;
-    return {
-      features: {
-        socialSentiment: sent * 0.5, // lower weight for fallback
-        socialVolume: Math.min(1, results.length / 10),
-        socialBullBearSkew: sent * 0.5,
-        polymarketTilt: 0,
-      },
-      evidenceUrls: results.map((r) => r.url || '').filter(Boolean).slice(0, 3),
-      degraded: true,
-    };
-  } catch {
-    return { features: emptySocialFeatures(), evidenceUrls: [], degraded: true };
   }
+
+  const mean = scores.reduce((a, b) => a + b, 0) / scores.length;
+  return {
+    features: {
+      socialSentiment: mean,
+      socialVolume: Math.min(1, articles.length / 10),
+      socialBullBearSkew: bullBearSkew(scores),
+      polymarketTilt: 0,
+    },
+    evidenceUrls: evidenceUrls.slice(0, 6),
+    documents,
+  };
 }
 
 /**
@@ -314,27 +308,15 @@ export async function collectMediaFeatures(
       : {
           newsCount48h: newsArticles.filter((a) => !classifyPressHeuristic(a).isPress).length,
           newsSentiment:
-            newsBodies.reduce((acc, t) => acc + simpleSentiment(t), 0) / newsBodies.length,
+            newsBodies.reduce((acc, t) => acc + scorePolarity(t), 0) / newsBodies.length,
           newsNovelty: noveltyScore(newsArticles),
         };
 
-  // 2) Social
-  const socialPack = await collectSocialFeatures(sym);
+  // 2) Social — Tavily/RSS → Scrapling → VADER (no Adanos)
+  const socialPack = await collectSocialFeatures(sym, { enrichBodies: opts?.enrichBodies });
   const social = socialPack.features;
   evidenceUrls.push(...socialPack.evidenceUrls);
-  if (socialPack.evidenceUrls.length) {
-    for (const url of socialPack.evidenceUrls) {
-      docs.push({
-        channel: 'social',
-        title: `${sym} social discussion`,
-        url,
-        source: domainOf(url),
-        sourceKind: 'tavily',
-        domain: domainOf(url),
-        tags: ['social', 'fallback'],
-      });
-    }
-  }
+  docs.push(...socialPack.documents);
 
   // 3) Press
   let pressArticles = await discoverPressForSymbol(sym, { company: opts?.company, max: 6 });
@@ -358,7 +340,7 @@ export async function collectMediaFeatures(
     });
     if (!cls.isPress && !classifyPressHeuristic(a).isPress) continue;
     pressCount++;
-    const sent = simpleSentiment(`${a.title} ${a.snippet || ''}`);
+    const sent = scorePolarity(`${a.title} ${a.snippet || ''}`);
     pressSentSum += sent;
     if (pressEventScore(cls.eventType) > pressEventScore(bestEvent)) bestEvent = cls.eventType;
     lastPressDays = Math.min(lastPressDays, 1); // discovered now → recent
@@ -457,21 +439,20 @@ export function featuresFromStoredMedia(
       : {
           newsCount48h: n48.length,
           newsSentiment:
-            n48.reduce((a, d) => a + simpleSentiment(`${d.title || ''} ${d.excerpt || d.body || ''}`), 0) /
+            n48.reduce((a, d) => a + scorePolarity(`${d.title || ''} ${d.excerpt || d.body || ''}`), 0) /
             n48.length,
           newsNovelty: Math.min(1, new Set(n48.map((d) => domainOf(d.url || ''))).size / n48.length + 0.2),
         };
 
   const s7 = socialDocs.filter((d) => inWindow(d, 7));
+  const socialScores = s7.map((d) => scorePolarity(`${d.title || ''} ${d.excerpt || d.body || ''}`));
   const social: SocialFeatures =
     s7.length === 0
       ? emptySocialFeatures()
       : {
-          socialSentiment:
-            s7.reduce((a, d) => a + simpleSentiment(`${d.title || ''} ${d.excerpt || ''}`), 0) / s7.length,
+          socialSentiment: socialScores.reduce((a, b) => a + b, 0) / socialScores.length,
           socialVolume: Math.min(1, s7.length / 10),
-          socialBullBearSkew:
-            s7.reduce((a, d) => a + simpleSentiment(`${d.title || ''} ${d.excerpt || ''}`), 0) / s7.length,
+          socialBullBearSkew: bullBearSkew(socialScores),
           polymarketTilt: 0,
         };
 
@@ -487,7 +468,7 @@ export function featuresFromStoredMedia(
       : {
           pressCount7d: p7.length,
           pressSentiment:
-            p7.reduce((a, d) => a + simpleSentiment(`${d.title || ''} ${d.excerpt || ''}`), 0) / p7.length,
+            p7.reduce((a, d) => a + scorePolarity(`${d.title || ''} ${d.excerpt || ''}`), 0) / p7.length,
           pressEventType: best,
           pressEventScore: pressEventScore(best),
           daysSinceLastPress: 1,

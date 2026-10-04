@@ -384,7 +384,7 @@ export async function getForecastLabDataAction() {
       attributions,
       sampleRows,
       universeCount: getForecastUniverse().count,
-      adanosConfigured: Boolean(process.env.ADANOS_API_KEY),
+      socialIntake: 'tavily-rss-scrapling-vader',
     })
   );
 }
