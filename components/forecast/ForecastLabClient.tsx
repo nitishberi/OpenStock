@@ -56,6 +56,7 @@ export default function ForecastLabClient({ data }: { data: LabData }) {
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   const [smoke, setSmoke] = useState(true);
+  const [liveMedia, setLiveMedia] = useState(false);
 
   const latest = lab.evals[0];
   const attr = lab.attributions[0];
@@ -68,7 +69,7 @@ export default function ForecastLabClient({ data }: { data: LabData }) {
         const res = await runStrategyTestAction({
           symbolLimit: smoke ? 5 : 100,
           windowDays: smoke ? 40 : 120,
-          liveMedia: false,
+          liveMedia,
         });
         setMsg(
           `Strategy test complete. evalRunId=${res.evalRunId}, symbols≈${(res.summary as { symbolCount?: number })?.symbolCount ?? '?'}`
@@ -115,6 +116,14 @@ export default function ForecastLabClient({ data }: { data: LabData }) {
           <label className="flex items-center gap-2 text-xs text-muted-foreground">
             <input type="checkbox" checked={smoke} onChange={(e) => setSmoke(e.target.checked)} />
             Smoke (5 symbols × 40 days)
+          </label>
+          <label className="flex items-center gap-2 text-xs text-muted-foreground">
+            <input
+              type="checkbox"
+              checked={liveMedia}
+              onChange={(e) => setLiveMedia(e.target.checked)}
+            />
+            Live media (news/social/press on latest asOf)
           </label>
           <div className="flex gap-2">
             <button

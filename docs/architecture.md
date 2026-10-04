@@ -86,10 +86,14 @@ flowchart LR
 cp .env.example .env   # Finnhub, Gemini, Tavily; Scrapling worker for bodies; Alpaca optional for bar fallback
 npm install
 npm test
-npm run strategy-test:smoke   # 5 symbols × 40 days
-npm run strategy-test         # full 100 × 120 days
-npm run dev                   # UI: /forecasts and /forecasts/lab
+npm run strategy-test:smoke        # 5 × 40, price-only (fast)
+npm run strategy-test:smoke:live   # 5 × 40 + live news/social/press on latest asOf
+npm run strategy-test              # 100 × 120 price-only
+npm run strategy-test:live         # 100 × 120 + live media (slow / rate-limited)
+npm run dev                        # UI: /forecasts and /forecasts/lab
 ```
+
+Walk-forward asOf dates use `lib/forecast/calendar.ts` (weekdays + NYSE holiday skip; no lookahead).
 
 Compose: `docker compose up --build` → `web:3000`, `mongodb`, `scrapling-worker:8091`.
 

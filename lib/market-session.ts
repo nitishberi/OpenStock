@@ -1,5 +1,6 @@
 // NYSE trading sessions, in New York minutes-of-day.
-// ponytail: exchange holidays and half-days are ignored; add a holiday list if it matters.
+// Forecast/strategy asOf dates use lib/forecast/calendar.ts (NYSE holiday skip).
+// This clock ignores holidays/half-days (session UI only).
 export const PRE = 4 * 60, OPEN = 9 * 60 + 30, CLOSE = 16 * 60, AFTER_END = 20 * 60;
 export const DAY = 24 * 60;
 

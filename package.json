@@ -13,6 +13,8 @@
     "test:watch": "vitest",
     "strategy-test": "npx tsx scripts/strategy-test-swing.ts",
     "strategy-test:smoke": "npx tsx scripts/strategy-test-swing.ts --smoke",
+    "strategy-test:smoke:live": "npx tsx scripts/strategy-test-swing.ts --smoke --live-media",
+    "strategy-test:live": "npx tsx scripts/strategy-test-swing.ts --live-media",
     "worker:dev": "cd services/scrapling-worker && uvicorn main:app --reload --port 8091"
   },
   "dependencies": {
