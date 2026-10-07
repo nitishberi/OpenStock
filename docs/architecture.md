@@ -7,9 +7,9 @@ Fork of [OpenStock](https://github.com/Open-Dev-Society/OpenStock) (AGPL-3.0). *
 | Piece | Role |
 |-------|------|
 | **web** (Next.js 15) | OpenStock UI + `/forecasts` + Forecast Lab `/forecasts/lab` |
-| **mongodb** | Watchlists, media, FeatureSnapshots, PriceForecasts, ModelWeights, EvalRuns |
-| **scrapling-worker** | Fetch/extract allowlisted news, social, and press bodies after discovery |
-| **Inngest** | Post-close resolve + weekly strategy test / train (day-trader loop only if trading UI on) |
+| **mongodb** | Watchlists, media, InsiderFilings, FeatureSnapshots, PriceForecasts, ModelWeights, EvalRuns |
+| **scrapling-worker** | Fetch/extract allowlisted news/social/press bodies; OpenInsider Form 4 HTML tables |
+| **Inngest** | Post-close resolve, weekly strategy test/train, daily/midday insider scan (day-trader loop only if trading UI on) |
 
 ```mermaid
 flowchart LR
@@ -18,6 +18,7 @@ flowchart LR
   News[Tavily_RSS_Scrapling] --> Features
   Social[Tavily_Social_Scrapling] --> Features
   Press[Press_Scrapling] --> Features
+  OI[OpenInsider_HTML] --> Features
   Features --> Baseline[TrainableBaseline]
   Baseline --> Bands[UncertaintyBands]
   Bands --> Gemini[Gemini_ExplainClamp]
@@ -36,45 +37,50 @@ flowchart LR
 
 | Path | Purpose |
 |------|---------|
-| `/forecasts` | Watchlist D1–D5 predicted closes + 80% bands + evidence |
-| `/forecasts/lab` | 100-stock strategy test, predicted vs actual, factor reports, train/promote |
+| `/forecasts` | Watchlist D1–D5 predicted closes + 80% bands + news/social/press/insider evidence |
+| `/forecasts/lab` | 100-stock strategy test, predicted vs actual, factor reports (incl. **insider** channel), train/promote |
 | `/bot` | Redirects to `/forecasts` unless `TRADING_UI_ENABLED=true` |
 
-## Media channels (all first-class)
+## Media + insider channels (all first-class)
 
 | Channel | Discover → fetch → score | Features |
 |---------|--------------------------|----------|
 | **news** | Tavily (+ Brave/SerpAPI) → Scrapling → VADER/lexicon | `newsCount48h`, `newsSentiment`, `newsNovelty` |
 | **social** | Tavily discussion queries + public RSS → Scrapling on allowlisted public URLs → local VADER (**no Adanos**, no login walls) | `socialSentiment`, `socialVolume`, `socialBullBearSkew` |
 | **press** | Tavily PR queries + Finnhub/news heuristics → classify → Scrapling allowlist | `pressCount7d`, `pressSentiment`, `pressEventType`, `daysSinceLastPress` |
+| **insider** | OpenInsider HTML (cluster buys, purchases ≥ $25k, per-ticker) via Scrapling → `InsiderFiling` upsert | `insiderBuyValue7d`, `insiderBuyCount7d`, `insiderClusterBuy`, `insiderCeoCfoBuy`, `insiderNetValue30d`, `daysSinceLastInsiderBuy` |
 
-`MediaDocument.channel` is `news` \| `social` \| `press`. Press tilt uses `pressTiltMultiplier` (default 1.5× vs generic news) in `ModelWeights`. Social allowlist includes public Reddit / StockTwits / finance discussion hosts; X/Twitter login walls are skipped.
+`MediaDocument.channel` is `news` \| `social` \| `press`. Insider rows live in **`InsiderFiling`** (not MediaDocument). Press/insider tilts use multipliers in `ModelWeights` and share `eventTiltCap`.
+
+Ingest: `POST /api/media/ingest` and `POST /api/insider/ingest` (worker-token auth).
 
 ## Forecast stack
 
-1. **FeatureSnapshot** — frozen at `asOf` (no lookahead): price + news + social + press
+1. **FeatureSnapshot** — frozen at `asOf` (no lookahead): price + news + social + press + insider
 2. **swing-baseline-vN** — blend + ridge coefficients + calibrated band `k`
 3. **80% bands** — vol-scaled; Gemini may nudge `yHat` only inside `[lo80, hi80]`
 4. **Strategy test** — walk-forward on `config/forecast-universe-100.json` vs real closes
-5. **Factor attribution** — Spearman + grouped ablation (price/news/social/press)
+5. **Factor attribution** — Spearman + grouped ablation (price/news/social/press/**insider**)
 6. **Train** — ridge refit on train fold; holdout last 20 days; promote if MAPE/direction gate passes
 
 ## Pricing vs prediction
 
 - Legacy **PricingEngine** (`lib/pricing/`) remains for optional trading proposals.
 - Prediction path never places orders. Gemini never invents prices outside bands.
+- Insider signals are **prediction features / Lab attribution only** — no auto-trade.
 
 ## Key paths
 
 | Path | Purpose |
 |------|---------|
 | `config/forecast-universe-100.json` | Fixed 100-name research universe |
-| `lib/forecast/` | Features, media, baseline, strategy test, attribution, train |
-| `lib/forecast/social-discover.ts` | Tavily + public RSS social discovery (allowlist / login-wall filter) |
-| `lib/forecast/sentiment.ts` | Local VADER + finance lexicon polarity |
+| `lib/forecast/` | Features, media, insider, baseline, strategy test, attribution, train |
+| `lib/forecast/insider.ts` | InsiderFiling → FeatureSnapshot + evidence lines + event tilt |
+| `services/scrapling-worker/openinsider.py` | OpenInsider tinytable parsers + fixtures |
 | `lib/actions/forecast.actions.ts` | Server actions for UI + Lab |
 | `scripts/strategy-test-swing.ts` | CLI strategy test |
 | `lib/inngest/forecast.ts` | Post-close + weekly cron |
+| `lib/inngest/insider.ts` | Daily/midday OpenInsider scan + forecast refresh |
 
 ## Daily bars
 
@@ -83,11 +89,12 @@ flowchart LR
 ## How to run
 
 ```bash
-cp .env.example .env   # Finnhub, Gemini, Tavily; Scrapling worker for bodies; Alpaca optional for bar fallback
+cp .env.example .env   # Finnhub, Gemini, Tavily; Scrapling worker for bodies + OpenInsider
 npm install
 npm test
+cd services/scrapling-worker && python3 -m unittest test_openinsider -v
 npm run strategy-test:smoke        # 5 × 40, price-only (fast)
-npm run strategy-test:smoke:live   # 5 × 40 + live news/social/press on latest asOf
+npm run strategy-test:smoke:live   # 5 × 40 + live news/social/press/insider on latest asOf
 npm run strategy-test              # 100 × 120 price-only
 npm run strategy-test:live         # 100 × 120 + live media (slow / rate-limited)
 npm run dev                        # UI: /forecasts and /forecasts/lab
@@ -102,6 +109,7 @@ Compose: `docker compose up --build` → `web:3000`, `mongodb`, `scrapling-worke
 - **OpenStock** — Open Dev Society, AGPL-3.0
 - **daily_stock_analysis** — ZhuLinsen, MIT — report/news patterns adapted
 - **Scrapling** — D4Vinci — article fetch worker
+- **OpenInsider** — public Form 4 HTML screener (scraped; no paid API)
 - **vader-sentiment** — local polarity for media features
 
 See `ATTRIBUTION.md`.

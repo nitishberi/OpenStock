@@ -69,3 +69,48 @@ export async function ingestArticlesWithScrapling(params: {
   }
   return (await res.json()) as ScraplingMediaDoc[];
 }
+
+export interface OpenInsiderScanResult {
+  ok: boolean;
+  count: number;
+  meta?: unknown[];
+  persist?: unknown;
+  filings: Array<Record<string, unknown>>;
+}
+
+/** Scrape OpenInsider cluster / $25k lists (and optional tickers) via Scrapling worker. */
+export async function scrapeOpenInsiderLists(opts?: {
+  lists?: Array<'cluster-buys' | 'purchases-25k'>;
+  tickers?: string[];
+  persist?: boolean;
+  force?: boolean;
+}): Promise<OpenInsiderScanResult> {
+  const res = await fetch(`${workerBase()}/openinsider/scan`, {
+    method: 'POST',
+    headers: workerHeaders(),
+    body: JSON.stringify({
+      lists: opts?.lists ?? ['cluster-buys', 'purchases-25k'],
+      tickers: opts?.tickers ?? [],
+      persist: opts?.persist ?? true,
+      force: opts?.force ?? false,
+    }),
+    signal: AbortSignal.timeout(180_000),
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(`OpenInsider scan failed ${res.status}: ${text}`);
+  }
+  return (await res.json()) as OpenInsiderScanResult;
+}
+
+export async function scrapeOpenInsiderTicker(
+  ticker: string,
+  opts?: { persist?: boolean }
+): Promise<OpenInsiderScanResult> {
+  return scrapeOpenInsiderLists({
+    lists: [],
+    tickers: [ticker.toUpperCase()],
+    persist: opts?.persist ?? true,
+    force: true,
+  });
+}

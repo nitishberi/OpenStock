@@ -100,6 +100,7 @@ describe('ridge train', () => {
     expect(attr.channelSummary.news).toBeDefined();
     expect(attr.channelSummary.social).toBeDefined();
     expect(attr.channelSummary.press).toBeDefined();
+    expect(attr.channelSummary.insider).toBeDefined();
 
     const trained = trainFromRows({
       rows: result.trainRows,

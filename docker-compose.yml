@@ -45,9 +45,11 @@ services:
       MONGODB_URI: mongodb://root:example@mongodb:27017/openstock?authSource=admin
       MONGODB_DB: openstock
       WEB_INGEST_URL: http://web:3000/api/media/ingest
+      WEB_INSIDER_INGEST_URL: http://web:3000/api/insider/ingest
       SOURCES_CONFIG: /app/sources.yaml
       SCRAPE_RATE_LIMIT_SECONDS: "2"
       SCRAPLING_STEALTH: "false"
+      OPENINSIDER_LIST_CACHE_SECONDS: "900"
     volumes:
       - ./services/scrapling-worker/sources.yaml:/app/sources.yaml:ro
     restart: unless-stopped

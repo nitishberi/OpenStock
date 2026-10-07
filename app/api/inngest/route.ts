@@ -4,6 +4,7 @@ import { alertsEnabled } from "@/lib/market-data";
 import { sendWeeklyNewsSummary, sendSignUpEmail, checkStockAlerts, checkInactiveUsers } from "@/lib/inngest/functions";
 import { dayTraderMarketLoop, dayTraderPrePostReview } from "@/lib/inngest/daytrader";
 import { forecastPostClose, forecastStrategyTestWeekly } from "@/lib/inngest/forecast";
+import { insiderScanDaily, insiderScanMidday } from "@/lib/inngest/insider";
 import { tradingUiEnabled } from "@/lib/forecast/flags";
 
 export const { GET, POST, PUT } = serve({
@@ -15,6 +16,8 @@ export const { GET, POST, PUT } = serve({
         checkInactiveUsers,
         forecastPostClose,
         forecastStrategyTestWeekly,
+        insiderScanDaily,
+        insiderScanMidday,
         ...(tradingUiEnabled ? [dayTraderMarketLoop, dayTraderPrePostReview] : []),
         ...(alertsEnabled ? [checkStockAlerts] : []),
     ],

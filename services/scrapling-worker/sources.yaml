@@ -31,6 +31,8 @@ allowlist:
   # Public social / discussion (no login walls — skip X/Twitter auth pages)
   - reddit.com
   - stocktwits.com
+  # SEC Form 4 screener (HTML tables; no paid API)
+  - openinsider.com
 
 rss:
   - name: Reuters Business

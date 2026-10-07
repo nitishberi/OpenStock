@@ -6,7 +6,13 @@
 import type { OhlcvBar } from '@/lib/pricing';
 import { addTradingDays, lastTradingDays, toUtcDateString } from './calendar';
 import { barsOnOrBefore, closeOnDate, fetchDailyBars, fetchUniverseDailyBars } from './bars';
-import { assembleFeatureSnapshot, emptyNewsFeatures, emptyPressFeatures, emptySocialFeatures } from './features';
+import {
+  assembleFeatureSnapshot,
+  emptyNewsFeatures,
+  emptyPressFeatures,
+  emptySocialFeatures,
+} from './features';
+import { emptyInsiderFeatures, featuresFromInsiderFilings, type InsiderFilingLike } from './insider';
 import { forecastHorizons } from './baseline';
 import { getForecastUniverse, getSectorMap } from './universe';
 import type {
@@ -34,6 +40,8 @@ export interface StrategyTestOptions {
   barsBySymbol?: Map<string, OhlcvBar[]>;
   /** When false, skip live media (use zeros) — offline replay. */
   liveMedia?: boolean;
+  /** Optional preloaded insider filings by ticker (for tests / offline). */
+  insiderBySymbol?: Map<string, InsiderFilingLike[]>;
   onProgress?: (msg: string) => void;
 }
 
@@ -149,7 +157,12 @@ export async function runStrategyTest(opts: StrategyTestOptions): Promise<Strate
       let news = emptyNewsFeatures();
       let social = emptySocialFeatures();
       let press = emptyPressFeatures();
+      let insider = emptyInsiderFeatures();
       let evidenceUrls: string[] = [];
+
+      if (opts.insiderBySymbol?.has(symbol)) {
+        insider = featuresFromInsiderFilings(opts.insiderBySymbol.get(symbol) || [], asOf);
+      }
 
       if (opts.liveMedia && asOf === asOfUsable[asOfUsable.length - 1]) {
         try {
@@ -165,6 +178,14 @@ export async function runStrategyTest(opts: StrategyTestOptions): Promise<Strate
         } catch {
           /* zeros */
         }
+        try {
+          const { collectInsiderFeatures } = await import('./insider');
+          const pack = await collectInsiderFeatures(symbol, asOf, { refreshTicker: false });
+          insider = pack.features;
+          evidenceUrls = [...evidenceUrls, ...pack.evidenceUrls];
+        } catch {
+          /* keep prior insider zeros / map */
+        }
       }
 
       let assembled: { features: FeatureSnapshotValues; lastClose: number };
@@ -178,6 +199,7 @@ export async function runStrategyTest(opts: StrategyTestOptions): Promise<Strate
           news,
           social,
           press,
+          insider,
         });
       } catch {
         continue;

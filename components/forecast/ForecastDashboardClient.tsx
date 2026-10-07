@@ -131,17 +131,55 @@ export default function ForecastDashboardClient(props: {
                     </tbody>
                   </table>
                 </div>
-                {head?.evidenceUrls?.length ? (
-                  <ul className="mt-3 flex flex-wrap gap-2 text-[12px]">
-                    {head.evidenceUrls.slice(0, 4).map((u) => (
-                      <li key={u}>
-                        <a href={u} target="_blank" rel="noreferrer" className="text-brand-ink underline-offset-2 hover:underline">
-                          {new URL(u).hostname.replace(/^www\./, '')}
-                        </a>
-                      </li>
-                    ))}
-                  </ul>
-                ) : null}
+                {(() => {
+                  const insiderUrl = head?.evidenceUrls?.find((u) =>
+                    /openinsider\.com/i.test(u)
+                  );
+                  const insiderLine =
+                    head?.rationale?.startsWith('Insider:')
+                      ? head.rationale.replace(/\.\s*Baseline.*$/, '').trim()
+                      : null;
+                  return (
+                    <>
+                      {insiderLine ? (
+                        <p className="mt-3 text-[12px] text-muted-foreground">
+                          <span className="font-medium text-foreground">Insider</span>
+                          {' · '}
+                          {insiderLine.replace(/^Insider:\s*/i, '')}
+                          {insiderUrl ? (
+                            <>
+                              {' '}
+                              <a
+                                href={insiderUrl}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="text-brand-ink underline-offset-2 hover:underline"
+                              >
+                                OpenInsider
+                              </a>
+                            </>
+                          ) : null}
+                        </p>
+                      ) : null}
+                      {head?.evidenceUrls?.length ? (
+                        <ul className="mt-3 flex flex-wrap gap-2 text-[12px]">
+                          {head.evidenceUrls.slice(0, 4).map((u) => (
+                            <li key={u}>
+                              <a
+                                href={u}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="text-brand-ink underline-offset-2 hover:underline"
+                              >
+                                {new URL(u).hostname.replace(/^www\./, '')}
+                              </a>
+                            </li>
+                          ))}
+                        </ul>
+                      ) : null}
+                    </>
+                  );
+                })()}
               </section>
             );
           })}

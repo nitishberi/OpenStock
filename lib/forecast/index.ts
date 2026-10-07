@@ -7,6 +7,7 @@ export * from './features';
 export * from './sentiment';
 export * from './social-discover';
 export * from './media';
+export * from './insider';
 export * from './weights';
 export * from './baseline';
 export * from './gemini-clamp';

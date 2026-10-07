@@ -225,9 +225,11 @@ async function main() {
     assembleFeatureSnapshot,
     forecastHorizons,
     collectMediaFeatures,
+    collectInsiderFeatures,
     emptyNewsFeatures,
     emptySocialFeatures,
     emptyPressFeatures,
+    emptyInsiderFeatures,
     explainAndClampForecasts,
   } = await import('../lib/forecast');
 
@@ -272,6 +274,10 @@ async function main() {
     rationale: string;
     evidenceUrls: string[];
     mediaNote: string;
+    insiderBuyCount7d: number;
+    insiderBuyValue7d: number;
+    insiderClusterBuy: number;
+    insiderEvidence?: string | null;
     error?: string;
   };
 
@@ -288,8 +294,10 @@ async function main() {
       let news = emptyNewsFeatures();
       let social = emptySocialFeatures();
       let press = emptyPressFeatures();
+      let insider = emptyInsiderFeatures();
       let evidenceUrls: string[] = [];
       let mediaNote = 'Media: baseline (zeros) — live intake skipped.';
+      let insiderEvidence: string | null = null;
 
       if (args.liveMedia) {
         try {
@@ -309,6 +317,18 @@ async function main() {
         }
       }
 
+      try {
+        const pack = await collectInsiderFeatures(symbol, asOf, { refreshTicker: false });
+        insider = pack.features;
+        insiderEvidence = pack.evidenceLine;
+        evidenceUrls = [...evidenceUrls, ...pack.evidenceUrls];
+        if (insider.insiderBuyCount7d > 0) {
+          mediaNote += ` Insider: buys7d=${insider.insiderBuyCount7d}, value7d$${insider.insiderBuyValue7d.toFixed(2)}M, cluster=${insider.insiderClusterBuy}, ceoCfo=${insider.insiderCeoCfoBuy}.`;
+        }
+      } catch {
+        /* zeros */
+      }
+
       const { features, lastClose } = assembleFeatureSnapshot({
         symbol,
         asOf,
@@ -318,6 +338,7 @@ async function main() {
         news,
         social,
         press,
+        insider,
       });
 
       let preds = forecastHorizons({
@@ -351,6 +372,10 @@ async function main() {
         rationale,
         evidenceUrls,
         mediaNote,
+        insiderBuyCount7d: insider.insiderBuyCount7d,
+        insiderBuyValue7d: insider.insiderBuyValue7d,
+        insiderClusterBuy: insider.insiderClusterBuy,
+        insiderEvidence,
       });
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
@@ -364,6 +389,9 @@ async function main() {
         rationale: '',
         evidenceUrls: [],
         mediaNote: '',
+        insiderBuyCount7d: 0,
+        insiderBuyValue7d: 0,
+        insiderClusterBuy: 0,
         error: msg,
       });
     }
@@ -399,6 +427,10 @@ async function main() {
     { header: 'D1 dir', key: 'd1dir', width: 9 },
     { header: 'D1 conf', key: 'd1conf', width: 10 },
     { header: 'Sheet', key: 'sheet', width: 12 },
+    { header: 'Insider buys 7d', key: 'insiderBuys', width: 14 },
+    { header: 'Insider $M 7d', key: 'insiderValue', width: 14 },
+    { header: 'Insider cluster', key: 'insiderCluster', width: 14 },
+    { header: 'Insider note', key: 'insiderNote', width: 40 },
     { header: 'Note', key: 'note', width: 36 },
   ];
   styleHeaderRow(summary.getRow(1));
@@ -420,6 +452,10 @@ async function main() {
       d1dir: byH.D1?.direction ?? (b.error ? 'ERR' : ''),
       d1conf: byH.D1?.confidence ?? null,
       sheet,
+      insiderBuys: b.insiderBuyCount7d,
+      insiderValue: b.insiderBuyValue7d,
+      insiderCluster: b.insiderClusterBuy,
+      insiderNote: b.insiderEvidence || '',
       note: b.error ? `FAILED: ${b.error}` : 'See sheet for bands + Actual close + explanation',
     });
   }

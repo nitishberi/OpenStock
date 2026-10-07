@@ -11,7 +11,7 @@ export const HORIZON_DAYS: Record<ForecastHorizon, number> = {
   D5: 5,
 };
 
-export type MediaChannel = 'news' | 'social' | 'press';
+export type MediaChannel = 'news' | 'social' | 'press' | 'insider';
 
 export type PressEventType = 'earnings' | 'product' | 'guidance' | 'legal' | 'other' | 'none';
 
@@ -20,7 +20,7 @@ export type ForecastDirection = 'up' | 'down' | 'flat';
 export type ForecastStatus = 'active' | 'resolved';
 
 /** Named feature groups used in attribution + training. */
-export type FeatureGroup = 'price' | 'news' | 'social' | 'press';
+export type FeatureGroup = 'price' | 'news' | 'social' | 'press' | 'insider';
 
 export interface MarketFeatures {
   ret1d: number;
@@ -57,11 +57,26 @@ export interface PressFeatures {
   daysSinceLastPress: number;
 }
 
+export interface InsiderFeatures {
+  /** Purchase value in last 7d, $ millions. */
+  insiderBuyValue7d: number;
+  insiderBuyCount7d: number;
+  /** Distinct-insider / Ins-column cluster strength (0 = none). */
+  insiderClusterBuy: number;
+  /** 1 if CEO/CFO purchase in window. */
+  insiderCeoCfoBuy: number;
+  /** Buys minus sells over 30d, $ millions. */
+  insiderNetValue30d: number;
+  /** Days since last buy, capped 0–30 (30 = none / stale). */
+  daysSinceLastInsiderBuy: number;
+}
+
 export interface FeatureSnapshotValues
   extends MarketFeatures,
     NewsFeatures,
     SocialFeatures,
-    PressFeatures {
+    PressFeatures,
+    InsiderFeatures {
   symbol: string;
   asOf: string; // ISO date (UTC calendar day of asOf close)
   sector: string;
@@ -101,10 +116,12 @@ export interface ModelWeightsPayload {
   >;
   /** Linear coefficients on FeatureSnapshot numeric fields (log-return space). */
   coefficients: Record<ForecastHorizon, Record<string, number>>;
-  /** Capped additive event tilt from news+social+press (log-return units). */
+  /** Capped additive event tilt from news+social+press+insider (log-return units). */
   eventTiltCap: number;
   /** Press releases get a higher capped tilt than generic news. */
   pressTiltMultiplier: number;
+  /** Insider cluster / CEO-CFO buys get a capped tilt (same clamp as press). */
+  insiderTiltMultiplier: number;
   /** Band half-width = k * realizedVol * sqrt(horizonDays). */
   bandK: Record<ForecastHorizon, number>;
   notes?: string;

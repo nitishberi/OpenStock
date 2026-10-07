@@ -2,11 +2,13 @@ import { computeAtr, type OhlcvBar } from '@/lib/pricing';
 import { barsOnOrBefore, closeOnDate } from './bars';
 import type {
   FeatureSnapshotValues,
+  InsiderFeatures,
   NewsFeatures,
   PressEventType,
   PressFeatures,
   SocialFeatures,
 } from './types';
+import { emptyInsiderFeatures } from './insider';
 
 function sma(values: number[], period: number): number | undefined {
   if (values.length < period) return undefined;
@@ -75,7 +77,16 @@ export function buildMarketFeatures(
   barsAll: OhlcvBar[],
   asOfIso: string,
   opts?: { spyBars?: OhlcvBar[]; sectorBars?: OhlcvBar[] }
-): Omit<FeatureSnapshotValues, keyof NewsFeatures | keyof SocialFeatures | keyof PressFeatures | 'symbol' | 'asOf' | 'sector'> & {
+): Omit<
+  FeatureSnapshotValues,
+  | keyof NewsFeatures
+  | keyof SocialFeatures
+  | keyof PressFeatures
+  | keyof InsiderFeatures
+  | 'symbol'
+  | 'asOf'
+  | 'sector'
+> & {
   lastClose: number;
 } {
   const bars = barsOnOrBefore(barsAll, asOfIso);
@@ -154,6 +165,7 @@ export function assembleFeatureSnapshot(input: {
   news?: NewsFeatures;
   social?: SocialFeatures;
   press?: PressFeatures;
+  insider?: InsiderFeatures;
 }): { features: FeatureSnapshotValues; lastClose: number } {
   const market = buildMarketFeatures(input.bars, input.asOf, {
     spyBars: input.spyBars,
@@ -168,6 +180,7 @@ export function assembleFeatureSnapshot(input: {
     ...(input.news ?? emptyNewsFeatures()),
     ...(input.social ?? emptySocialFeatures()),
     ...(input.press ?? emptyPressFeatures()),
+    ...(input.insider ?? emptyInsiderFeatures()),
   };
   return { features, lastClose };
 }

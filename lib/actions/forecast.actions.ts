@@ -10,6 +10,7 @@ import { getSession } from '@/lib/better-auth/auth';
 import { getUserWatchlist } from '@/lib/actions/watchlist.actions';
 import {
   assembleFeatureSnapshot,
+  collectInsiderFeatures,
   collectMediaFeatures,
   computeFactorAttribution,
   createSwingBaselineV1,
@@ -33,8 +34,9 @@ import {
 
 async function ensureActiveWeights(): Promise<ModelWeightsPayload> {
   await connectToDatabase();
+  const { normalizeWeights } = await import('@/lib/forecast/weights');
   const active = await ModelWeights.findOne({ active: true }).lean();
-  if (active?.payload) return active.payload as ModelWeightsPayload;
+  if (active?.payload) return normalizeWeights(active.payload as ModelWeightsPayload);
 
   const v1 = createSwingBaselineV1();
   await ModelWeights.findOneAndUpdate(
@@ -90,6 +92,8 @@ export async function runWatchlistForecastsAction(symbols?: string[]): Promise<{
     try {
       const bars = await fetchDailyBars(symbol);
       const media = await collectMediaFeatures(symbol, { persist: true, enrichBodies: false });
+      const insider = await collectInsiderFeatures(symbol, asOf, { refreshTicker: false });
+      const evidenceUrls = [...media.evidenceUrls, ...insider.evidenceUrls];
       const { features, lastClose } = assembleFeatureSnapshot({
         symbol,
         asOf,
@@ -99,6 +103,7 @@ export async function runWatchlistForecastsAction(symbols?: string[]): Promise<{
         news: media.news,
         social: media.social,
         press: media.press,
+        insider: insider.features,
       });
 
       await FeatureSnapshot.findOneAndUpdate(
@@ -112,12 +117,15 @@ export async function runWatchlistForecastsAction(symbols?: string[]): Promise<{
         features,
         lastClose,
         weights,
-        evidenceUrls: media.evidenceUrls,
+        evidenceUrls,
+        rationale: insider.evidenceLine
+          ? `Insider: ${insider.evidenceLine}. Baseline ${weights.version}.`
+          : undefined,
       });
       preds = await explainAndClampForecasts({
         features,
         forecasts: preds,
-        evidenceUrls: media.evidenceUrls,
+        evidenceUrls,
       });
 
       for (const p of preds) {
