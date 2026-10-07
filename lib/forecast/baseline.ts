@@ -12,6 +12,7 @@ import type {
 } from './types';
 import { FORECAST_HORIZONS } from './types';
 import { FEATURE_KEYS, scaleHorizonDays } from './weights';
+import { insiderRawEventTilt } from './insider';
 
 const round4 = (n: number) => Math.round(n * 10000) / 10000;
 const round2 = (n: number) => Math.round(n * 100) / 100;
@@ -48,12 +49,15 @@ export function predictLogReturn(
   const drift = features.ret5d * 0.6 + features.ret1d * 0.4;
   // Mean reversion: pull toward SMA20
   const meanReversion = -features.sma20Dist * 0.5;
-  // Event: news + social + press (press amplified)
+  // Event: news + social + press + insider (press/insider amplified; shared cap)
   const newsTilt = features.newsSentiment * 0.4 + Math.sign(features.newsSentiment) * Math.min(0.3, features.newsCount48h / 20);
   const socialTilt = features.socialSentiment * 0.35 + features.socialBullBearSkew * 0.15 + features.polymarketTilt * 0.15;
   const pressTilt =
     (features.pressSentiment * 0.45 + features.pressEventScore * 0.25) * weights.pressTiltMultiplier;
-  const rawEvent = newsTilt + socialTilt + pressTilt;
+  const insiderTilt = insiderRawEventTilt(features, {
+    multiplier: weights.insiderTiltMultiplier ?? 1.25,
+  });
+  const rawEvent = newsTilt + socialTilt + pressTilt + insiderTilt;
   const eventTilt = clamp(rawEvent * 0.01, -weights.eventTiltCap, weights.eventTiltCap);
 
   const blended =
@@ -82,7 +86,8 @@ export function confidenceFrom(features: FeatureSnapshotValues, bandWidthPct: nu
   const mediaBoost =
     Math.min(0.15, features.newsCount48h / 40) +
     Math.min(0.1, Math.abs(features.socialSentiment) * 0.1) +
-    Math.min(0.1, features.pressCount7d / 20);
+    Math.min(0.1, features.pressCount7d / 20) +
+    Math.min(0.1, features.insiderBuyCount7d / 10 + features.insiderClusterBuy * 0.02);
   const volPenalty = Math.min(0.25, features.vol21d);
   return clamp(0.45 + mediaBoost - volPenalty - bandWidthPct * 0.5, 0.15, 0.92);
 }

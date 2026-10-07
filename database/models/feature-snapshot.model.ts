@@ -38,6 +38,12 @@ const FeatureSnapshotSchema = new Schema<FeatureSnapshotDoc>(
     },
     pressEventScore: Number,
     daysSinceLastPress: Number,
+    insiderBuyValue7d: Number,
+    insiderBuyCount7d: Number,
+    insiderClusterBuy: Number,
+    insiderCeoCfoBuy: Number,
+    insiderNetValue30d: Number,
+    daysSinceLastInsiderBuy: Number,
   },
   { timestamps: true }
 );

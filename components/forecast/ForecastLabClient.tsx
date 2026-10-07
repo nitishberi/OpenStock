@@ -108,7 +108,7 @@ export default function ForecastLabClient({ data }: { data: LabData }) {
           <h1 className="mt-1 text-2xl font-semibold">Forecast Lab</h1>
           <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
             Walk-forward strategy test on {lab.universeCount} stocks — predicted vs real closes, factor attribution
-            (news / social / press / price), and ridge refit with holdout promotion. Active model{' '}
+            (news / social / press / insider / price), and ridge refit with holdout promotion. Active model{' '}
             <span className="font-mono text-foreground">{lab.activeVersion}</span>
           </p>
         </div>
@@ -123,7 +123,7 @@ export default function ForecastLabClient({ data }: { data: LabData }) {
               checked={liveMedia}
               onChange={(e) => setLiveMedia(e.target.checked)}
             />
-            Live media (news/social/press on latest asOf)
+            Live media (news/social/press/insider on latest asOf)
           </label>
           <div className="flex gap-2">
             <button
@@ -194,16 +194,19 @@ export default function ForecastLabClient({ data }: { data: LabData }) {
         <section className="rounded-xl px-4 py-4 shadow-[inset_0_0_0_1px_var(--line)]">
           <h2 className="text-sm font-semibold">Factor attribution · {attr.modelVersion}</h2>
           <p className="mt-2 text-sm text-muted-foreground">{attr.narrative}</p>
-          <div className="mt-3 grid gap-2 sm:grid-cols-4">
-            {Object.entries(attr.channelSummary || {}).map(([ch, v]) => (
-              <div key={ch} className="rounded-lg px-3 py-2 shadow-[inset_0_0_0_1px_var(--line)]">
-                <p className="text-[11px] uppercase tracking-wide text-faint">{ch}</p>
-                <p className="mt-1 font-mono text-sm">mapeΔ {(v.mapeDelta * 100).toFixed(3)}%</p>
-                <p className="font-mono text-xs text-muted-foreground">
-                  dir lift {(v.directionLift * 100).toFixed(2)}pp
-                </p>
-              </div>
-            ))}
+          <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
+            {(['price', 'news', 'social', 'press', 'insider'] as const).map((ch) => {
+              const v = attr.channelSummary?.[ch] || { mapeDelta: 0, directionLift: 0 };
+              return (
+                <div key={ch} className="rounded-lg px-3 py-2 shadow-[inset_0_0_0_1px_var(--line)]">
+                  <p className="text-[11px] uppercase tracking-wide text-faint">{ch}</p>
+                  <p className="mt-1 font-mono text-sm">mapeΔ {(v.mapeDelta * 100).toFixed(3)}%</p>
+                  <p className="font-mono text-xs text-muted-foreground">
+                    dir lift {(v.directionLift * 100).toFixed(2)}pp
+                  </p>
+                </div>
+              );
+            })}
           </div>
           <ul className="mt-3 space-y-1 text-xs">
             {(attr.factors || []).slice(0, 10).map((f) => (

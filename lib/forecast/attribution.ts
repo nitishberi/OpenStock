@@ -57,7 +57,8 @@ function mapeOf(rows: ResolvedForecastRow[], weights: ModelWeightsPayload, zeroG
     if (zeroGroup) {
       for (const k of FEATURE_KEYS) {
         if (FEATURE_GROUP_OF[k] === zeroGroup) {
-          (features as unknown as Record<string, number>)[k] = k === 'daysSinceLastPress' ? 30 : 0;
+          (features as unknown as Record<string, number>)[k] =
+            k === 'daysSinceLastPress' || k === 'daysSinceLastInsiderBuy' ? 30 : 0;
         }
       }
     }
@@ -83,7 +84,8 @@ function directionRate(rows: ResolvedForecastRow[], weights: ModelWeightsPayload
     if (zeroGroup) {
       for (const k of FEATURE_KEYS) {
         if (FEATURE_GROUP_OF[k] === zeroGroup) {
-          (features as unknown as Record<string, number>)[k] = k === 'daysSinceLastPress' ? 30 : 0;
+          (features as unknown as Record<string, number>)[k] =
+            k === 'daysSinceLastPress' || k === 'daysSinceLastInsiderBuy' ? 30 : 0;
         }
       }
     }
@@ -130,7 +132,7 @@ export function computeFactorAttribution(input: {
       let n = 0;
       for (const row of rows) {
         const features = { ...row.features } as FeatureSnapshotValues & Record<string, number>;
-        features[key] = key === 'daysSinceLastPress' ? 30 : 0;
+        features[key] = key === 'daysSinceLastPress' || key === 'daysSinceLastInsiderBuy' ? 30 : 0;
         const preds = forecastHorizons({ features, lastClose: row.lastClose, weights });
         const pred = preds.find((p) => p.horizon === row.horizon);
         if (!pred || row.actualClose == null) continue;
@@ -154,7 +156,7 @@ export function computeFactorAttribution(input: {
   factors.sort((a, b) => Math.abs(b.ablationMapeDelta) - Math.abs(a.ablationMapeDelta));
 
   const channelSummary = {} as FactorAttributionReportValues['channelSummary'];
-  for (const g of ['price', 'news', 'social', 'press'] as FeatureGroup[]) {
+  for (const g of ['price', 'news', 'social', 'press', 'insider'] as FeatureGroup[]) {
     const mapeDelta = mapeOf(rows, weights, g) - baseMape;
     const directionLift = baseDir - directionRate(rows, weights, g);
     channelSummary[g] = { mapeDelta, directionLift };

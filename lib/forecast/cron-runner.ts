@@ -21,8 +21,9 @@ import {
 
 async function activeWeights(): Promise<ModelWeightsPayload> {
   await connectToDatabase();
+  const { normalizeWeights } = await import('@/lib/forecast/weights');
   const active = await ModelWeights.findOne({ active: true }).lean();
-  if (active?.payload) return active.payload as ModelWeightsPayload;
+  if (active?.payload) return normalizeWeights(active.payload as ModelWeightsPayload);
   const v1 = createSwingBaselineV1();
   await ModelWeights.findOneAndUpdate(
     { version: v1.version },
@@ -110,6 +111,80 @@ export async function ensureCronStrategyTest(opts?: { symbolLimit?: number }) {
     );
     throw e;
   }
+}
+
+/** Cron / Inngest path: refresh D1–D5 forecasts for symbols (no session gate). */
+export async function runWatchlistForecastsForCron(symbols: string[]): Promise<{
+  forecastCount: number;
+  asOf: string;
+  modelVersion: string;
+}> {
+  const {
+    assembleFeatureSnapshot,
+    collectMediaFeatures,
+    collectInsiderFeatures,
+    explainAndClampForecasts,
+    fetchDailyBars,
+    forecastHorizons,
+    getSectorMap,
+    toUtcDateString,
+    previousTradingDayOnOrBefore,
+  } = await import('@/lib/forecast');
+  const { FeatureSnapshot } = await import('@/database/models/feature-snapshot.model');
+  const { PriceForecast } = await import('@/database/models/price-forecast.model');
+
+  const weights = await activeWeights();
+  const asOf = toUtcDateString(previousTradingDayOnOrBefore(new Date()));
+  const sectorMap = getSectorMap();
+  let spyBars: Awaited<ReturnType<typeof fetchDailyBars>> = [];
+  try {
+    spyBars = await fetchDailyBars('SPY');
+  } catch {
+    spyBars = [];
+  }
+
+  let forecastCount = 0;
+  for (const symbol of symbols.slice(0, 30).map((s) => s.toUpperCase())) {
+    try {
+      const bars = await fetchDailyBars(symbol);
+      const media = await collectMediaFeatures(symbol, { persist: true, enrichBodies: false });
+      const insider = await collectInsiderFeatures(symbol, asOf, { refreshTicker: true });
+      const { features, lastClose } = assembleFeatureSnapshot({
+        symbol,
+        asOf,
+        sector: sectorMap.get(symbol) || 'Unknown',
+        bars,
+        spyBars,
+        news: media.news,
+        social: media.social,
+        press: media.press,
+        insider: insider.features,
+      });
+      await FeatureSnapshot.findOneAndUpdate({ symbol, asOf }, { $set: features }, { upsert: true });
+      const evidenceUrls = [...media.evidenceUrls, ...insider.evidenceUrls];
+      let preds = forecastHorizons({
+        features,
+        lastClose,
+        weights,
+        evidenceUrls,
+        rationale: insider.evidenceLine
+          ? `Insider: ${insider.evidenceLine}`
+          : undefined,
+      });
+      preds = await explainAndClampForecasts({ features, forecasts: preds, evidenceUrls });
+      for (const p of preds) {
+        await PriceForecast.findOneAndUpdate(
+          { symbol, asOf, horizon: p.horizon, modelVersion: weights.version },
+          { $set: { ...p, status: 'active' } },
+          { upsert: true }
+        );
+        forecastCount++;
+      }
+    } catch (e) {
+      console.warn(`cron forecast failed for ${symbol}`, e);
+    }
+  }
+  return { forecastCount, asOf, modelVersion: weights.version };
 }
 
 export async function ensureCronTrain(evalRunId: string) {
