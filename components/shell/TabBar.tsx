@@ -16,6 +16,7 @@ const PAGE_LABELS: Record<string, string> = {
     '/watchlist': 'Watchlist',
     '/forecasts': 'Forecasts',
     '/forecasts/lab': 'Forecast Lab',
+    '/order-blocks': 'Order Blocks',
     '/bot': 'Day Trader',
     '/profile': 'Profile',
 };
