@@ -23,18 +23,20 @@ git clone https://github.com/nitishberi/OpenStock.git
 cd OpenStock
 git checkout cursor/macos-dmg-autodaytrader-cee4
 
-./scripts/macos/vendor-runtimes.sh          # Node arm64 (+ Python stub docs)
-# Optionally place CPython under dist/macos/vendor/python per PYTHON_VENDOR.md
-
-./scripts/macos/assemble-app.sh             # → dist/macos/AutoDayTrader.app
+./scripts/macos/vendor-runtimes.sh          # Node 22 + CPython aarch64 + Scrapling
+./scripts/macos/assemble-app.sh             # builds Vite UI → Resources/app/dist/client + server
 ./scripts/macos/create-dmg.sh               # → dist/macos/AutoDayTrader.dmg
 ./scripts/macos/codesign-notarize.sh        # sign + notarytool + staple
 ```
 
+`assemble-app.sh` runs `npm run build:ui` and **requires** `apps/desktop/dist/client/index.html`.
+The Hono host serves that folder from `Resources/app` (cwd). If you only see the
+“API up… Build UI…” stub page, the SPA was not packaged — rebuild with assemble.
+
 ## First run on clean Mac
 
 1. Open DMG → drag `AutoDayTrader.app` to Applications.
-2. Launch once (Gatekeeper should accept notarized build).
+2. Launch once (Gatekeeper should accept notarized build). Open `http://127.0.0.1:8787` — you should see the **Forecasts SPA** (`<title>AutoDayTrader</title>`), not the API stub.
 3. Settings → paste Finnhub / Gemini / Tavily / worker token (Keychain).
 4. Optional 24/7:
 
@@ -43,8 +45,8 @@ git checkout cursor/macos-dmg-autodaytrader-cee4
 # or from app Resources after install
 ```
 
-5. Smoke: open `http://127.0.0.1:8787` — see Project store
-   `docs/macos-dmg-smoke-checklist.md`.
+5. Smoke: `curl -s http://127.0.0.1:8787/ | grep -q 'id="root"'` and `/api/health` — see
+   `docs/macos-dmg-host-smoke-results.md`.
 
 ## Safety defaults
 

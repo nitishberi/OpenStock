@@ -39,6 +39,14 @@ fi
 )
 
 # Copy app payload
+# Vite outDir is dist/client — Hono serves process.cwd()/dist/client (cwd=Resources/app).
+# Keep a legacy `client/` copy so older servers still find index.html.
+if [[ ! -f "${DESKTOP}/dist/client/index.html" ]]; then
+  echo "ERROR: missing ${DESKTOP}/dist/client/index.html — run npm run build:ui first" >&2
+  exit 1
+fi
+mkdir -p "${RES}/app/dist"
+rsync -a --delete "${DESKTOP}/dist/client/" "${RES}/app/dist/client/"
 rsync -a --delete "${DESKTOP}/dist/client/" "${RES}/app/client/"
 rsync -a --delete "${DESKTOP}/src/server/" "${RES}/app/server/"
 cp "${DESKTOP}/package.json" "${RES}/app/"
@@ -62,6 +70,19 @@ if [[ -d "${ROOT}/services/scrapling-worker" ]]; then
   rsync -a \
     --exclude '__pycache__' --exclude '.venv' --exclude 'fixtures' \
     "${ROOT}/services/scrapling-worker/" "${RES}/scrapling-worker/"
+fi
+
+# Bake production node_modules so LaunchAgent (no Homebrew PATH) can start
+# without a first-run npm install.
+if [[ -x "${DIST}/vendor/node/bin/npm" ]]; then
+  echo "==> Installing production node_modules into app Resources"
+  (
+    cd "${RES}/app"
+    "${DIST}/vendor/node/bin/npm" ci --omit=dev
+  )
+elif [[ -d "${DESKTOP}/node_modules" ]]; then
+  echo "==> Copying desktop node_modules (filter to runtime) via npm ci preferred next time"
+  rsync -a "${DESKTOP}/node_modules/" "${RES}/app/node_modules/"
 fi
 
 # Info.plist
@@ -101,15 +122,28 @@ export SCRAPLING_WORKER_TOKEN_REQUIRED=true
 export NODE_PATH="${RES}/app/node_modules:${NODE_PATH:-}"
 
 NODE_BIN="${RES}/node/bin/node"
+NPM_BIN="${RES}/node/bin/npm"
 if [[ ! -x "${NODE_BIN}" ]]; then
   NODE_BIN="$(command -v node)"
+fi
+if [[ ! -x "${NPM_BIN}" ]]; then
+  NPM_BIN="$(command -v npm || true)"
+fi
+# Prefer bundled Node/npm on PATH for any child tools
+if [[ -d "${RES}/node/bin" ]]; then
+  export PATH="${RES}/node/bin:${PATH}"
 fi
 
 cd "${RES}/app"
 export AUTODAYTRADER_LIB_ROOT="${RES}/app"
-# Install production deps into Resources on first run if missing
+# Install production deps into Resources on first run if missing (use bundled npm)
 if [[ ! -d node_modules ]]; then
-  npm ci --omit=dev 2>/dev/null || npm install --omit=dev --legacy-peer-deps
+  if [[ -n "${NPM_BIN}" && -x "${NPM_BIN}" ]]; then
+    "${NPM_BIN}" ci --omit=dev 2>/dev/null || "${NPM_BIN}" install --omit=dev --legacy-peer-deps
+  else
+    echo "AutoDayTrader: node_modules missing and npm not found (bundle incomplete)" >&2
+    exit 127
+  fi
 fi
 
 # Prefer tsx so TypeScript server + forecast .ts libs load

@@ -23,13 +23,14 @@ export function createApp(cfg: DesktopConfig) {
   // Also expose ingest under /api for worker compatibility
   // (api routes already have /media/ingest and /insider/ingest)
 
-  const clientDist = path.resolve(process.cwd(), 'dist/client');
-  const altClient = path.resolve(process.cwd(), 'client-dist');
-  const staticRoot = fs.existsSync(clientDist)
-    ? 'dist/client'
-    : fs.existsSync(altClient)
-      ? 'client-dist'
-      : null;
+  // SPA roots relative to process.cwd() (Resources/app in the .app bundle):
+  // - dist/client → vite outDir + assemble-app.sh preferred layout
+  // - client      → legacy assemble layout (pre-path fix)
+  // - client-dist → optional alias
+  const candidates = ['dist/client', 'client', 'client-dist'] as const;
+  const staticRoot =
+    candidates.find((rel) => fs.existsSync(path.resolve(process.cwd(), rel, 'index.html'))) ??
+    null;
 
   if (staticRoot) {
     app.use('/*', serveStatic({ root: staticRoot }));
