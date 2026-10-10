@@ -19,6 +19,10 @@
 
 # production
 /build
+/dist/
+apps/desktop/dist/
+apps/desktop/node_modules/
+*.secret
 
 # misc
 .DS_Store

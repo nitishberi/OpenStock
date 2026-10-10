@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.autodaytrader.agent</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/Applications/AutoDayTrader.app/Contents/MacOS/AutoDayTrader</string>
+  </array>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>HOST</key>
+    <string>127.0.0.1</string>
+    <key>PORT</key>
+    <string>8787</string>
+    <key>TRADING_UI_ENABLED</key>
+    <string>false</string>
+    <key>ALPACA_ALLOW_LIVE</key>
+    <string>false</string>
+    <key>AUTODAYTRADER_SPAWN_WORKER</key>
+    <string>1</string>
+  </dict>
+</dict>
+</plist>

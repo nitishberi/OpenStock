@@ -17,7 +17,13 @@
     "strategy-test:live": "npx tsx scripts/strategy-test-swing.ts --live-media",
     "export-forecast-workbook": "npx tsx scripts/export-forecast-workbook.ts",
     "ingest-forecast-workbook": "npx tsx scripts/ingest-forecast-workbook.ts",
-    "worker:dev": "cd services/scrapling-worker && uvicorn main:app --reload --port 8091"
+    "worker:dev": "cd services/scrapling-worker && uvicorn main:app --reload --port 8091",
+    "desktop:dev": "npm --prefix apps/desktop run dev",
+    "desktop:test": "npm --prefix apps/desktop test",
+    "desktop:build": "npm --prefix apps/desktop run build",
+    "macos:assemble": "./scripts/macos/assemble-app.sh",
+    "macos:dmg": "./scripts/macos/create-dmg.sh",
+    "macos:sign": "./scripts/macos/codesign-notarize.sh"
   },
   "dependencies": {
     "@radix-ui/react-avatar": "^1.1.10",
