@@ -1,0 +1,117 @@
+#!/usr/bin/env bash
+# Assemble AutoDayTrader.app layout (arm64). Run on Mac mini.
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
+DESKTOP="${ROOT}/apps/desktop"
+DIST="${ROOT}/dist/macos"
+APP_NAME="AutoDayTrader"
+APP="${DIST}/${APP_NAME}.app"
+CONTENTS="${APP}/Contents"
+MACOS="${CONTENTS}/MacOS"
+RES="${CONTENTS}/Resources"
+VERSION="${APP_VERSION:-0.1.0}"
+BUNDLE_ID="${APP_BUNDLE_ID:-com.autodaytrader.app}"
+
+echo "==> Assembling ${APP}"
+rm -rf "${APP}"
+mkdir -p "${MACOS}" "${RES}/app" "${RES}/node" "${RES}/python" "${RES}/scrapling-worker"
+
+# Build desktop app
+(
+  cd "${DESKTOP}"
+  npm ci
+  npm run build:ui
+  # Keep server as TS sources + tsx for path aliases to lib/forecast
+  mkdir -p dist/server-src
+  cp -R src/server/. dist/server-src/
+  cp package.json tsconfig.json tsconfig.server.json vitest.config.ts dist/ 2>/dev/null || true
+)
+
+# Copy app payload
+rsync -a --delete "${DESKTOP}/dist/client/" "${RES}/app/client/"
+rsync -a --delete "${DESKTOP}/src/server/" "${RES}/app/server/"
+cp "${DESKTOP}/package.json" "${RES}/app/"
+cp "${DESKTOP}/tsconfig.json" "${RES}/app/"
+# Shared OpenStock forecast libs (read-only slice)
+mkdir -p "${RES}/app/lib" "${RES}/app/config"
+rsync -a "${ROOT}/lib/forecast/" "${RES}/app/lib/forecast/"
+rsync -a "${ROOT}/lib/pricing/" "${RES}/app/lib/pricing/"
+rsync -a "${ROOT}/lib/news/" "${RES}/app/lib/news/" 2>/dev/null || true
+cp "${ROOT}/config/forecast-universe-100.json" "${RES}/app/config/" 2>/dev/null || true
+
+# Vendor Node + Python if present (populated by vendor-runtimes.sh)
+if [[ -d "${DIST}/vendor/node" ]]; then
+  rsync -a "${DIST}/vendor/node/" "${RES}/node/"
+fi
+if [[ -d "${DIST}/vendor/python" ]]; then
+  rsync -a "${DIST}/vendor/python/" "${RES}/python/"
+fi
+if [[ -d "${ROOT}/services/scrapling-worker" ]]; then
+  rsync -a \
+    --exclude '__pycache__' --exclude '.venv' --exclude 'fixtures' \
+    "${ROOT}/services/scrapling-worker/" "${RES}/scrapling-worker/"
+fi
+
+# Info.plist
+cat > "${CONTENTS}/Info.plist" <<PLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>CFBundleName</key><string>${APP_NAME}</string>
+  <key>CFBundleDisplayName</key><string>${APP_NAME}</string>
+  <key>CFBundleIdentifier</key><string>${BUNDLE_ID}</string>
+  <key>CFBundleVersion</key><string>${VERSION}</string>
+  <key>CFBundleShortVersionString</key><string>${VERSION}</string>
+  <key>CFBundlePackageType</key><string>APPL</string>
+  <key>CFBundleExecutable</key><string>AutoDayTrader</string>
+  <key>LSMinimumSystemVersion</key><string>13.0</string>
+  <key>NSHighResolutionCapable</key><true/>
+  <key>NSUserNotificationAlertStyle</key><string>alert</string>
+</dict>
+</plist>
+PLIST
+
+# Launcher
+cat > "${MACOS}/AutoDayTrader" <<'LAUNCH'
+#!/bin/bash
+set -euo pipefail
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+RES="${ROOT}/Resources"
+export AUTODAYTRADER_RESOURCES="${RES}"
+export AUTODAYTRADER_SPAWN_WORKER="${AUTODAYTRADER_SPAWN_WORKER:-1}"
+export HOST="${HOST:-127.0.0.1}"
+export PORT="${PORT:-8787}"
+export TRADING_UI_ENABLED=false
+export ALPACA_ALLOW_LIVE=false
+export BIND_LOCALHOST_ONLY=true
+export SCRAPLING_WORKER_TOKEN_REQUIRED=true
+export NODE_PATH="${RES}/app/node_modules:${NODE_PATH:-}"
+
+NODE_BIN="${RES}/node/bin/node"
+if [[ ! -x "${NODE_BIN}" ]]; then
+  NODE_BIN="$(command -v node)"
+fi
+
+cd "${RES}/app"
+# Install production deps into Resources on first run if missing
+if [[ ! -d node_modules ]]; then
+  npm ci --omit=dev --ignore-scripts 2>/dev/null || npm install --omit=dev
+fi
+
+# Prefer tsx for TS + path aliases
+if [[ -x node_modules/.bin/tsx ]]; then
+  exec "${NODE_BIN}" node_modules/.bin/tsx server/index.ts
+fi
+exec "${NODE_BIN}" --import tsx server/index.ts
+LAUNCH
+chmod +x "${MACOS}/AutoDayTrader"
+
+# Sparkle appcast placeholder
+cp "${DESKTOP}/resources/appcast.xml.template" "${RES}/appcast.xml" 2>/dev/null || true
+cp "${DESKTOP}/resources/LaunchAgent.plist.template" "${RES}/LaunchAgent.plist.template"
+cp "${DESKTOP}/resources/PYTHON_VENDOR.md" "${RES}/PYTHON_VENDOR.md"
+
+echo "==> Assembled ${APP}"
+echo "    Next: scripts/macos/vendor-runtimes.sh (if needed), codesign-notarize.sh, create-dmg.sh"

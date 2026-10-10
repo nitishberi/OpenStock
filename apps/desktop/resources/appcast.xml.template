@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Sparkle appcast placeholder for AutoDayTrader.
+  Replace SPARKLE_FEED_URL / enclosure URL after hosting signed builds.
+  Sign the appcast with Sparkle EdDSA keys (keep private key offline).
+
+  Notes for Mac mini operators:
+  - Feed URL env: SPARKLE_FEED_URL (default placeholder in desktop config)
+  - Enclosure must be Developer ID signed + notarized DMG/ZIP
+  - sparkle:edSignature from `sign_update` tool
+-->
+<rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle">
+  <channel>
+    <title>AutoDayTrader updates</title>
+    <language>en</language>
+    <item>
+      <title>Version 0.1.0</title>
+      <sparkle:version>0.1.0</sparkle:version>
+      <sparkle:shortVersionString>0.1.0</sparkle:shortVersionString>
+      <description><![CDATA[
+        Initial desktop runtime: Hono+Vite+SQLite, forecasts/Lab, Keychain secrets.
+      ]]></description>
+      <pubDate>Sat, 10 Oct 2026 00:00:00 +0000</pubDate>
+      <enclosure
+        url="https://updates.example.invalid/autodaytrader/AutoDayTrader-0.1.0.dmg"
+        length="0"
+        type="application/octet-stream"
+        sparkle:edSignature="REPLACE_WITH_SPARKLE_ED_SIGNATURE" />
+    </item>
+  </channel>
+</rss>
