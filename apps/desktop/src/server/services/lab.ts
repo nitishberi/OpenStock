@@ -21,18 +21,20 @@ export function getLabData(cfg: DesktopConfig): LabData {
     ({ version: 'swing-baseline-v1-stub', createdAt: new Date().toISOString() }) as WeightsPayload;
   const weights = ensureActiveWeights(cfg, create);
   const db = getDb();
-  const evals = db
-    .prepare('SELECT * FROM eval_run ORDER BY createdAt DESC LIMIT 10')
-    .all()
-    .map((r: Record<string, unknown>) => ({
+  const evals = (
+    db.prepare('SELECT * FROM eval_run ORDER BY createdAt DESC LIMIT 10').all() as Array<
+      Record<string, unknown>
+    >
+  ).map((r) => ({
       ...r,
       summary: r.summary ? JSON.parse(String(r.summary)) : undefined,
       holdoutAsOfs: r.holdoutAsOfs ? JSON.parse(String(r.holdoutAsOfs)) : [],
     }));
-  const attributions = db
-    .prepare('SELECT * FROM factor_attribution ORDER BY createdAt DESC LIMIT 5')
-    .all()
-    .map((r: Record<string, unknown>) => ({
+  const attributions = (
+    db.prepare('SELECT * FROM factor_attribution ORDER BY createdAt DESC LIMIT 5').all() as Array<
+      Record<string, unknown>
+    >
+  ).map((r) => ({
       ...r,
       channelSummary: r.channelSummary ? JSON.parse(String(r.channelSummary)) : {},
       factors: r.factors ? JSON.parse(String(r.factors)) : [],
@@ -219,11 +221,18 @@ export async function trainAndPromote(
     const holdoutAsOfs = new Set(
       evalDoc.holdoutAsOfs ? (JSON.parse(String(evalDoc.holdoutAsOfs)) as string[]) : []
     );
-    const result = trainMod.trainFromRows({
+    const trainFromRows = trainMod.trainFromRows as (input: Record<string, unknown>) => {
+      candidate: WeightsPayload;
+      promoted: boolean;
+      reason: string;
+      holdoutMetrics: unknown;
+    };
+    const nextModelVersion = weightsMod.nextModelVersion as (v: string) => string;
+    const result = trainFromRows({
       rows: trainRows,
       parent,
       holdoutAsOfs,
-      nextVersion: weightsMod.nextModelVersion(parent.version),
+      nextVersion: nextModelVersion(parent.version),
     });
 
     upsertWeights(result.candidate, result.promoted, parent.version);

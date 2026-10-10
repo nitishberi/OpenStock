@@ -2,12 +2,18 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api, type ForecastRow } from '../api';
 
+type Mode = 'watchlist' | 'custom' | 'random' | 'universe';
+
 export default function ForecastsPage() {
   const [rows, setRows] = useState<ForecastRow[]>([]);
   const [modelVersion, setModelVersion] = useState('');
   const [asOf, setAsOf] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [msg, setMsg] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+  const [mode, setMode] = useState<Mode>('watchlist');
+  const [customSymbols, setCustomSymbols] = useState('');
+  const [randomCount, setRandomCount] = useState(20);
 
   useEffect(() => {
     api
@@ -25,15 +31,48 @@ export default function ForecastsPage() {
   const refresh = async () => {
     setPending(true);
     setError(null);
+    setMsg(null);
     try {
-      const res = await api.runForecasts();
+      const symbols =
+        mode === 'custom'
+          ? customSymbols
+              .split(/[\s,]+/)
+              .map((s) => s.trim().toUpperCase())
+              .filter(Boolean)
+          : undefined;
+      const res = await api.runForecasts({
+        mode,
+        symbols,
+        count: mode === 'random' ? randomCount : undefined,
+        maxSymbols: 100,
+      });
       setRows(res.forecasts);
       setModelVersion(res.modelVersion);
       setAsOf(res.asOf);
+      setMsg(`Ran ${res.symbolCount ?? '—'} symbols (${res.mode || mode})`);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
       setPending(false);
+    }
+  };
+
+  const exportXlsx = () => {
+    window.location.href = '/api/forecasts/export.xlsx';
+  };
+
+  const importXlsx = async (file: File | null) => {
+    if (!file) return;
+    setError(null);
+    setMsg(null);
+    try {
+      const r = await api.importForecasts(file);
+      setMsg(`Import: updated ${r.updated}, skipped ${r.skipped}`);
+      if (r.errors?.length) setError(r.errors.join('; '));
+      const fres = await api.forecasts();
+      setRows(fres.forecasts);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
     }
   };
 
@@ -59,14 +98,61 @@ export default function ForecastsPage() {
           <Link className="btn ghost" to="/lab">
             Forecast Lab
           </Link>
+          <button className="btn ghost" type="button" onClick={exportXlsx}>
+            Export Excel
+          </button>
+          <label className="btn ghost" style={{ cursor: 'pointer' }}>
+            Import Excel
+            <input
+              type="file"
+              accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+              hidden
+              onChange={(e) => void importXlsx(e.target.files?.[0] || null)}
+            />
+          </label>
           <button className="btn" type="button" onClick={refresh} disabled={pending}>
             {pending ? 'Forecasting…' : 'Run forecasts'}
           </button>
         </div>
       </div>
+
+      <div className="row" style={{ gap: '0.75rem', flexWrap: 'wrap', marginBottom: '1rem' }}>
+        <label>
+          Universe{' '}
+          <select value={mode} onChange={(e) => setMode(e.target.value as Mode)}>
+            <option value="watchlist">Watchlist</option>
+            <option value="custom">User-entered symbols</option>
+            <option value="random">Random from 100</option>
+            <option value="universe">Full 100 universe</option>
+          </select>
+        </label>
+        {mode === 'custom' ? (
+          <input
+            style={{ flex: 1, minWidth: '12rem' }}
+            placeholder="AAPL, MSFT, NVDA…"
+            value={customSymbols}
+            onChange={(e) => setCustomSymbols(e.target.value)}
+          />
+        ) : null}
+        {mode === 'random' ? (
+          <label>
+            Count{' '}
+            <input
+              type="number"
+              min={1}
+              max={100}
+              value={randomCount}
+              onChange={(e) => setRandomCount(Number(e.target.value) || 20)}
+              style={{ width: '4rem' }}
+            />
+          </label>
+        ) : null}
+      </div>
+
       {error ? <p className="err">{error}</p> : null}
+      {msg ? <p className="lead">{msg}</p> : null}
       {!rows.length ? (
-        <p className="lead">No forecasts yet. Add a watchlist, then run forecasts.</p>
+        <p className="lead">No forecasts yet. Pick a universe mode, then run forecasts.</p>
       ) : (
         [...bySymbol.entries()].map(([symbol, list]) => (
           <div key={symbol} style={{ marginTop: '1.25rem' }}>
@@ -80,6 +166,7 @@ export default function ForecastsPage() {
                   <th>80% band</th>
                   <th>Dir</th>
                   <th>Conf</th>
+                  <th>Actual</th>
                 </tr>
               </thead>
               <tbody>
@@ -93,13 +180,25 @@ export default function ForecastsPage() {
                     </td>
                     <td>{r.direction}</td>
                     <td className="mono">{(r.confidence * 100).toFixed(0)}%</td>
+                    <td className="mono">{r.actualClose != null ? r.actualClose.toFixed(2) : '—'}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
             {list[0]?.rationale ? (
-              <p style={{ color: 'var(--muted)', fontSize: '0.85rem', marginTop: '0.5rem' }}>
-                {list[0].rationale}
+              <p className="lead" style={{ marginTop: '0.35rem' }}>
+                {list[0].rationale.startsWith('Insider:') ? (
+                  <>
+                    <strong>Insider</strong> · {list[0].rationale.replace(/^Insider:\s*/, '')}{' '}
+                    {list[0].evidenceUrls?.some((u) => u.includes('openinsider')) ? (
+                      <a href="https://openinsider.com/" target="_blank" rel="noreferrer">
+                        OpenInsider
+                      </a>
+                    ) : null}
+                  </>
+                ) : (
+                  list[0].rationale
+                )}
               </p>
             ) : null}
           </div>

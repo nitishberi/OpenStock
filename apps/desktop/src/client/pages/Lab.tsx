@@ -69,7 +69,7 @@ export default function LabPage({ isAdmin }: { isAdmin: boolean }) {
       <h1>Forecast Lab</h1>
       <p className="lead">
         Active model <span className="mono">{lab.activeVersion}</span> · universe {lab.universeCount}{' '}
-        · intake {lab.socialIntake}
+        · intake {lab.socialIntake != null ? String(lab.socialIntake) : '—'}
       </p>
       <div className="row" style={{ marginBottom: '1rem' }}>
         <label className="row" style={{ color: 'var(--muted)' }}>

@@ -177,7 +177,26 @@ CREATE TABLE IF NOT EXISTS login_attempts (
   createdAt TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS notify_pref (
+  type TEXT PRIMARY KEY,
+  enabled INTEGER NOT NULL DEFAULT 1,
+  channels TEXT NOT NULL DEFAULT '["macos"]',
+  threshold REAL,
+  updatedAt TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS alert_event (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  type TEXT NOT NULL,
+  symbol TEXT,
+  fingerprint TEXT NOT NULL UNIQUE,
+  title TEXT NOT NULL,
+  body TEXT NOT NULL,
+  createdAt TEXT NOT NULL
+);
+
 CREATE INDEX IF NOT EXISTS idx_login_attempts_email_time ON login_attempts(email, createdAt);
 CREATE INDEX IF NOT EXISTS idx_forecast_symbol ON price_forecast(symbol, asOf);
 CREATE INDEX IF NOT EXISTS idx_insider_ticker ON insider_filing(ticker, tradeDate);
+CREATE INDEX IF NOT EXISTS idx_alert_event_type ON alert_event(type, createdAt);
 `;

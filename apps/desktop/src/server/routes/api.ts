@@ -9,12 +9,18 @@ import {
   getWatchlist,
   listLatestForecasts,
   removeWatchlistItem,
+  resolveForecastSymbols,
   runWatchlistForecasts,
+  type ForecastRunMode,
 } from '../services/forecasts.js';
 import { getLabData, runStrategyTest, trainAndPromote } from '../services/lab.js';
 import { dispatchNotification, notifyMaterialInsider } from '../services/notify.js';
+import { listNotifyPrefs, upsertNotifyPref, NOTIFY_TYPES, type NotifyType } from '../services/notify-prefs.js';
+import { exportForecastWorkbook, ingestForecastWorkbook } from '../services/excel-workbook.js';
+import { runOpenInsiderScan, runVolumeUptickScan } from '../services/scheduler.js';
 import { getDb, nowIso } from '../db/index.js';
 import { isAllowedDiscordWebhook, isAllowedTelegramChatId } from '../services/allowlists.js';
+import type { NotifyChannel } from '../services/notify.js';
 
 function requireUser(c: { req: { header: (n: string) => string | undefined } }) {
   const token = parseSessionCookie(c.req.header('cookie'));
@@ -73,13 +79,43 @@ export function apiRoutes(cfg: DesktopConfig) {
   app.post('/forecasts/run', async (c) => {
     const session = requireUser(c);
     const body = await c.req.json().catch(() => ({}));
-    let symbols: string[] = Array.isArray(body.symbols)
-      ? body.symbols.map(String)
-      : [];
-    if (!symbols.length) {
-      symbols = getWatchlist(session.user.id).map((w) => w.symbol);
+    const mode = (body.mode as ForecastRunMode | undefined) || undefined;
+    const symbolsIn = Array.isArray(body.symbols) ? body.symbols.map(String) : [];
+    const symbols = await resolveForecastSymbols(cfg, session.user.id, {
+      symbols: symbolsIn,
+      mode,
+      count: body.count != null ? Number(body.count) : undefined,
+      seed: body.seed != null ? Number(body.seed) : undefined,
+      maxSymbols: body.maxSymbols != null ? Number(body.maxSymbols) : 100,
+    });
+    const result = await runWatchlistForecasts(cfg, symbols, {
+      maxSymbols: body.maxSymbols != null ? Number(body.maxSymbols) : 100,
+    });
+    return c.json({ ...result, mode: mode || (symbolsIn.length ? 'custom' : 'watchlist'), symbolCount: symbols.length });
+  });
+
+  app.get('/forecasts/export.xlsx', async (c) => {
+    requireUser(c);
+    const symbols = c.req.query('symbols')?.split(',').filter(Boolean);
+    const { buffer, filename, rowCount } = await exportForecastWorkbook({ symbols });
+    return new Response(new Uint8Array(buffer), {
+      headers: {
+        'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        'Content-Disposition': `attachment; filename="${filename}"`,
+        'X-Row-Count': String(rowCount),
+      },
+    });
+  });
+
+  app.post('/forecasts/import', async (c) => {
+    requireUser(c);
+    const body = await c.req.parseBody();
+    const file = body.file;
+    if (!file || typeof file === 'string') {
+      return c.json({ error: 'multipart file field "file" required (.xlsx)' }, 400);
     }
-    const result = await runWatchlistForecasts(cfg, symbols);
+    const ab = await file.arrayBuffer();
+    const result = await ingestForecastWorkbook(Buffer.from(ab));
     return c.json(result);
   });
 
@@ -178,6 +214,71 @@ export function apiRoutes(cfg: DesktopConfig) {
     return c.json({ result });
   });
 
+  app.get('/notify/prefs', (c) => {
+    requireUser(c);
+    return c.json({ prefs: listNotifyPrefs(), types: NOTIFY_TYPES });
+  });
+
+  app.put('/notify/prefs', async (c) => {
+    requireUser(c);
+    const body = await c.req.json().catch(() => ({}));
+    const type = String(body.type || '') as NotifyType;
+    if (!NOTIFY_TYPES.includes(type)) return c.json({ error: 'Unknown notify type' }, 400);
+    const channels = Array.isArray(body.channels)
+      ? (body.channels.filter((x: string) =>
+          ['macos', 'email', 'telegram', 'discord'].includes(x)
+        ) as NotifyChannel[])
+      : undefined;
+    let threshold: number | null | undefined = undefined;
+    if (body.threshold === null) threshold = null;
+    else if (body.threshold !== undefined && Number.isFinite(Number(body.threshold))) {
+      threshold = Number(body.threshold);
+    }
+    const pref = upsertNotifyPref({
+      type,
+      enabled: body.enabled != null ? Boolean(body.enabled) : undefined,
+      channels,
+      threshold,
+    });
+    return c.json({ pref });
+  });
+
+  app.post('/notify/volume-scan', async (c) => {
+    requireUser(c);
+    const result = await runVolumeUptickScan(cfg);
+    return c.json(result);
+  });
+
+  app.get('/insider/filings', (c) => {
+    requireUser(c);
+    const ticker = c.req.query('ticker')?.toUpperCase();
+    const limit = Math.min(200, Math.max(1, Number(c.req.query('limit') || 50)));
+    const db = getDb();
+    const rows = ticker
+      ? db
+          .prepare(
+            `SELECT id, ticker, filingDate, tradeDate, insiderName, title, tradeType, price, qty, valueUsd, ownedAfter, sourceUrl
+             FROM insider_filing WHERE ticker = ? ORDER BY filingDate DESC, id DESC LIMIT ?`
+          )
+          .all(ticker, limit)
+      : db
+          .prepare(
+            `SELECT id, ticker, filingDate, tradeDate, insiderName, title, tradeType, price, qty, valueUsd, ownedAfter, sourceUrl
+             FROM insider_filing ORDER BY filingDate DESC, id DESC LIMIT ?`
+          )
+          .all(limit);
+    return c.json({ filings: rows });
+  });
+
+  app.post('/insider/scan', async (c) => {
+    requireUser(c);
+    const body = await c.req.json().catch(() => ({}));
+    const lists = Array.isArray(body.lists) ? body.lists.map(String) : undefined;
+    const result = await runOpenInsiderScan(cfg, { lists });
+    if (!result.ok) return c.json(result, (result.status as 502) || 502);
+    return c.json(result);
+  });
+
   // Worker ingest — token required when workerTokenRequired
   app.post('/media/ingest', async (c) => {
     if (!workerAuthorized(c, cfg)) return c.json({ error: 'Unauthorized' }, 401);
@@ -231,7 +332,7 @@ export function apiRoutes(cfg: DesktopConfig) {
        ON CONFLICT(ticker, filingDate, insiderName, tradeDate, qty, valueUsd) DO UPDATE SET
          title=excluded.title, tradeType=excluded.tradeType, price=excluded.price, sourceUrl=excluded.sourceUrl`
     );
-    const material: Array<{ ticker: string; summary: string }> = [];
+    const material: Array<{ ticker: string; summary: string; valueUsd: number }> = [];
     for (const f of filings) {
       const ticker = String(f?.ticker || '').trim().toUpperCase();
       const filingDate = String(f?.filingDate || '').slice(0, 10);
@@ -264,10 +365,11 @@ export function apiRoutes(cfg: DesktopConfig) {
         material.push({
           ticker,
           summary: `${insiderName} ${f?.tradeType || 'trade'} ~$${Math.round(Math.abs(valueUsd)).toLocaleString()} on ${tradeDate}`,
+          valueUsd,
         });
       }
     }
-    for (const m of material.slice(0, 5)) {
+    for (const m of material.slice(0, 8)) {
       void notifyMaterialInsider(m);
     }
     return c.json({ ok: true, upserted, skipped });

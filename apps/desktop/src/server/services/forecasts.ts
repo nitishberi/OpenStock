@@ -23,6 +23,7 @@ type ForecastRow = {
   evidenceUrls: string[];
   modelVersion: string;
   status?: string;
+  actualClose?: number | null;
 };
 
 async function loadForecastLib(): Promise<{
@@ -178,6 +179,7 @@ export function listLatestForecasts(symbols?: string[]): ForecastRow[] {
     evidenceUrls: JSON.parse(String(r.evidenceUrls || '[]')),
     modelVersion: String(r.modelVersion),
     status: String(r.status),
+    actualClose: r.actualClose == null ? null : Number(r.actualClose),
   }));
 }
 
@@ -198,16 +200,83 @@ export async function getActiveModel(cfg: DesktopConfig): Promise<{
   return { version: weights.version, weights };
 }
 
+function mulberry32(seed: number) {
+  let a = seed >>> 0;
+  return () => {
+    a = (a + 0x6d2b79f5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+export type ForecastRunMode = 'watchlist' | 'custom' | 'random' | 'universe';
+
+export type ForecastRunOpts = {
+  symbols?: string[];
+  mode?: ForecastRunMode;
+  /** For random mode — how many names to sample (default 20). */
+  count?: number;
+  seed?: number;
+  /** Hard cap to protect rate limits (default 100, max 100). */
+  maxSymbols?: number;
+};
+
+export async function resolveForecastSymbols(
+  cfg: DesktopConfig,
+  userId: string,
+  opts: ForecastRunOpts
+): Promise<string[]> {
+  const lib = await loadForecastLib();
+  const max = Math.min(100, Math.max(1, opts.maxSymbols ?? 100));
+  const mode = opts.mode || (opts.symbols?.length ? 'custom' : 'watchlist');
+  let syms: string[] = [];
+
+  if (mode === 'custom' || (opts.symbols && opts.symbols.length && mode !== 'random' && mode !== 'universe')) {
+    syms = (opts.symbols || []).map((s) => s.toUpperCase()).filter(Boolean);
+  } else if (mode === 'watchlist') {
+    syms = getWatchlist(userId).map((w) => w.symbol);
+  } else if (mode === 'universe' || mode === 'random') {
+    const universe = lib
+      ? lib.getForecastUniverse().symbols.map((s) => s.symbol)
+      : [];
+    if (mode === 'universe') {
+      syms = universe;
+    } else {
+      const count = Math.min(max, Math.max(1, opts.count ?? 20));
+      const rng = mulberry32(opts.seed ?? Date.now() % 1_000_000);
+      const arr = [...universe];
+      for (let i = arr.length - 1; i > 0; i--) {
+        const j = Math.floor(rng() * (i + 1));
+        [arr[i], arr[j]] = [arr[j], arr[i]];
+      }
+      syms = arr.slice(0, count);
+    }
+  }
+
+  if (!syms.length && lib) {
+    syms = lib
+      .getForecastUniverse()
+      .symbols.slice(0, 8)
+      .map((s) => s.symbol);
+  }
+  void cfg;
+  return [...new Set(syms)].slice(0, max);
+}
+
 export async function runWatchlistForecasts(
   cfg: DesktopConfig,
-  symbols: string[]
+  symbols: string[],
+  runOpts?: ForecastRunOpts
 ): Promise<{ forecasts: ForecastRow[]; modelVersion: string; asOf: string }> {
   const lib = await loadForecastLib();
   const { version, weights } = await getActiveModel(cfg);
+  const max = Math.min(100, Math.max(1, runOpts?.maxSymbols ?? 100));
 
   if (!lib) {
     const asOf = new Date().toISOString().slice(0, 10);
-    const forecasts: ForecastRow[] = symbols.slice(0, 20).flatMap((symbol) =>
+    const forecasts: ForecastRow[] = symbols.slice(0, max).flatMap((symbol) =>
       (['D1', 'D2', 'D3', 'D5'] as const).map((horizon) => ({
         symbol: symbol.toUpperCase(),
         asOf,
@@ -247,7 +316,7 @@ export async function runWatchlistForecasts(
   const forecasts: ForecastRow[] = [];
   const sectorBarsCache = new Map<string, Array<{ date: string; close: number }>>();
 
-  for (const symbol of syms.slice(0, 20)) {
+  for (const symbol of syms.slice(0, max)) {
     try {
       const bars = await lib.fetchDailyBars(symbol);
       const sector = sectorMap.get(symbol) || 'Unknown';
@@ -274,28 +343,28 @@ export async function runWatchlistForecasts(
             persist: false,
             enrichBodies: false,
           });
-          news = media.news;
-          social = media.social;
-          press = media.press;
+          news = media.news as object;
+          social = media.social as object;
+          press = media.press as object;
           evidenceUrls = media.evidenceUrls || [];
         } catch (e) {
           console.warn('media features failed', symbol, e);
         }
       }
 
-      let insiderFeatures = lib.emptyInsiderFeatures();
+      let insiderFeatures = lib.emptyInsiderFeatures() as Record<string, number>;
       if (lib.collectInsiderFeatures) {
         try {
           // Prefer SQLite filings
           const local = loadInsiderFromSqlite(symbol, asOf);
           if (local.count) {
-            insiderFeatures = local.features;
+            insiderFeatures = local.features as Record<string, number>;
             evidenceUrls = [...evidenceUrls, ...local.evidenceUrls];
           } else {
             const insider = await lib.collectInsiderFeatures(symbol, asOf, {
               refreshTicker: false,
             });
-            insiderFeatures = insider.features;
+            insiderFeatures = insider.features as Record<string, number>;
             evidenceUrls = [...evidenceUrls, ...(insider.evidenceUrls || [])];
           }
         } catch (e) {

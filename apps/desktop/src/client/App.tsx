@@ -5,6 +5,7 @@ import ForecastsPage from './pages/Forecasts';
 import LabPage from './pages/Lab';
 import WatchlistPage from './pages/Watchlist';
 import SettingsPage from './pages/Settings';
+import OpenInsiderPage from './pages/OpenInsider';
 import SignInPage from './pages/SignIn';
 
 function Shell({ user, onSignOut, children }: { user: User; onSignOut: () => void; children: React.ReactNode }) {
@@ -12,6 +13,7 @@ function Shell({ user, onSignOut, children }: { user: User; onSignOut: () => voi
   const nav = [
     ['/', 'Forecasts'],
     ['/lab', 'Lab'],
+    ['/insider', 'OpenInsider'],
     ['/watchlist', 'Watchlist'],
     ['/settings', 'Settings'],
   ] as const;
@@ -80,6 +82,7 @@ export default function App() {
       <Routes>
         <Route path="/" element={<ForecastsPage />} />
         <Route path="/lab" element={<LabPage isAdmin={Boolean(user.isAdmin)} />} />
+        <Route path="/insider" element={<OpenInsiderPage />} />
         <Route path="/watchlist" element={<WatchlistPage />} />
         <Route path="/settings" element={<SettingsPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />

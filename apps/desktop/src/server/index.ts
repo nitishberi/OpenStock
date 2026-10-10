@@ -4,6 +4,7 @@ import { getDb } from './db/index.js';
 import { initSecrets } from './secrets/index.js';
 import { createApp } from './app.js';
 import { startScraplingWorker, stopScraplingWorker } from './worker/spawn.js';
+import { startDesktopScheduler, stopDesktopScheduler } from './services/scheduler.js';
 import { pruneOldLoginAttempts } from './auth/rate-limit.js';
 import { setUserRole, getUserByEmail } from './db/index.js';
 
@@ -33,6 +34,10 @@ async function main() {
     startScraplingWorker(cfg, resources);
   }
 
+  if (process.env.AUTODAYTRADER_SCHEDULER !== '0') {
+    startDesktopScheduler(cfg);
+  }
+
   console.log(
     `[AutoDayTrader] listening http://${cfg.host}:${cfg.port} data=${cfg.dataDir} secrets=${secrets.backendName}`
   );
@@ -43,6 +48,7 @@ async function main() {
   serve({ fetch: app.fetch, hostname: cfg.host, port: cfg.port });
 
   const shutdown = () => {
+    stopDesktopScheduler();
     stopScraplingWorker();
     process.exit(0);
   };

@@ -32,11 +32,35 @@ export const api = {
   signOut: () => req<{ ok: boolean }>('/auth/sign-out', { method: 'POST' }),
   health: () => req<Record<string, unknown>>('/api/health'),
   forecasts: () => req<{ forecasts: ForecastRow[] }>('/api/forecasts'),
-  runForecasts: (symbols?: string[]) =>
-    req<{ forecasts: ForecastRow[]; modelVersion: string; asOf: string }>('/api/forecasts/run', {
+  runForecasts: (opts?: {
+    symbols?: string[];
+    mode?: 'watchlist' | 'custom' | 'random' | 'universe';
+    count?: number;
+    seed?: number;
+    maxSymbols?: number;
+  }) =>
+    req<{
+      forecasts: ForecastRow[];
+      modelVersion: string;
+      asOf: string;
+      mode?: string;
+      symbolCount?: number;
+    }>('/api/forecasts/run', {
       method: 'POST',
-      body: JSON.stringify({ symbols }),
+      body: JSON.stringify(opts || {}),
     }),
+  importForecasts: async (file: File) => {
+    const fd = new FormData();
+    fd.append('file', file);
+    const res = await fetch('/api/forecasts/import', {
+      method: 'POST',
+      credentials: 'include',
+      body: fd,
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error((data as { error?: string }).error || res.statusText);
+    return data as { updated: number; skipped: number; errors: string[] };
+  },
   lab: () => req<LabData>('/api/lab'),
   strategyTest: (opts: { smoke?: boolean; liveMedia?: boolean }) =>
     req<{ evalRunId: string; summary: unknown }>('/api/lab/strategy-test', {
@@ -69,6 +93,44 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ title: 'AutoDayTrader', body: 'Test notification' }),
     }),
+  notifyPrefs: () => req<{ prefs: NotifyPref[]; types: string[] }>('/api/notify/prefs'),
+  saveNotifyPref: (pref: Partial<NotifyPref> & { type: string }) =>
+    req<{ pref: NotifyPref }>('/api/notify/prefs', {
+      method: 'PUT',
+      body: JSON.stringify(pref),
+    }),
+  volumeScan: () => req<{ checked: number; alerts: number }>('/api/notify/volume-scan', { method: 'POST' }),
+  insiderFilings: (ticker?: string) =>
+    req<{ filings: InsiderFiling[] }>(
+      `/api/insider/filings${ticker ? `?ticker=${encodeURIComponent(ticker)}` : ''}`
+    ),
+  insiderScan: (lists?: string[]) =>
+    req<{ ok: boolean; upserted?: number; error?: string }>('/api/insider/scan', {
+      method: 'POST',
+      body: JSON.stringify({ lists }),
+    }),
+};
+
+export type NotifyPref = {
+  type: string;
+  enabled: boolean;
+  channels: Array<'macos' | 'email' | 'telegram' | 'discord'>;
+  threshold: number | null;
+};
+
+export type InsiderFiling = {
+  id: number;
+  ticker: string;
+  filingDate: string;
+  tradeDate: string;
+  insiderName: string;
+  title?: string | null;
+  tradeType?: string | null;
+  price?: number | null;
+  qty?: number | null;
+  valueUsd?: number | null;
+  ownedAfter?: number | null;
+  sourceUrl?: string | null;
 };
 
 export type ForecastRow = {
@@ -84,11 +146,13 @@ export type ForecastRow = {
   rationale: string;
   evidenceUrls: string[];
   modelVersion: string;
+  actualClose?: number | null;
 };
 
 export type LabData = {
   activeVersion: string;
   universeCount: number;
+  socialIntake?: unknown;
   evals: Array<{
     id?: string;
     _id?: string;

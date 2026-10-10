@@ -3,6 +3,7 @@ import { promisify } from 'node:util';
 import nodemailer from 'nodemailer';
 import { getSecrets } from '../secrets/index.js';
 import { isAllowedDiscordWebhook, isAllowedTelegramChatId, isPrivateHostname } from './allowlists.js';
+import { getNotifyPref, recordAlertOnce, type NotifyType } from './notify-prefs.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -27,9 +28,11 @@ async function notifyMacOS(title: string, body: string): Promise<boolean> {
     }
   }
   try {
-    const notifier = await import('node-notifier');
+    // optionalDependency — may lack types
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const notifier = (await import('node-notifier')) as any;
     await new Promise<void>((resolve, reject) => {
-      notifier.default.notify({ title, message: body.slice(0, 200) }, (err) => {
+      notifier.default.notify({ title, message: body.slice(0, 200) }, (err: Error | null) => {
         if (err) reject(err);
         else resolve();
       });
@@ -133,23 +136,87 @@ export async function dispatchNotification(payload: NotifyPayload): Promise<Noti
   return results;
 }
 
+async function dispatchTyped(
+  type: NotifyType,
+  title: string,
+  body: string,
+  opts?: { symbol?: string; fingerprint?: string }
+): Promise<NotifyResult | null> {
+  const pref = getNotifyPref(type);
+  if (!pref.enabled) return null;
+  if (opts?.fingerprint) {
+    const ok = recordAlertOnce({
+      type,
+      symbol: opts.symbol,
+      fingerprint: opts.fingerprint,
+      title,
+      body,
+    });
+    if (!ok) return null;
+  }
+  return dispatchNotification({ title, body, channels: pref.channels });
+}
+
 export async function notifyForecastRefresh(opts: {
   symbolCount: number;
   modelVersion: string;
   asOf: string;
-}): Promise<NotifyResult> {
-  return dispatchNotification({
-    title: 'AutoDayTrader forecasts refreshed',
-    body: `${opts.symbolCount} symbols · model ${opts.modelVersion} · asOf ${opts.asOf}`,
-  });
+}): Promise<NotifyResult | null> {
+  return dispatchTyped(
+    'forecast_refresh',
+    'AutoDayTrader forecasts refreshed',
+    `${opts.symbolCount} symbols · model ${opts.modelVersion} · asOf ${opts.asOf}`
+  );
 }
 
 export async function notifyMaterialInsider(opts: {
   ticker: string;
   summary: string;
-}): Promise<NotifyResult> {
-  return dispatchNotification({
-    title: `Insider Form 4 — ${opts.ticker}`,
-    body: opts.summary.slice(0, 500),
-  });
+  valueUsd?: number;
+}): Promise<NotifyResult | null> {
+  const heavy = getNotifyPref('form4_heavy');
+  const material = getNotifyPref('form4_material');
+  const abs = opts.valueUsd != null ? Math.abs(opts.valueUsd) : 0;
+  const heavyMin = heavy.threshold ?? 250_000;
+  const materialMin = material.threshold ?? 100_000;
+  if (heavy.enabled && abs >= heavyMin) {
+    return dispatchTyped(
+      'form4_heavy',
+      `Heavy Form 4 buy/sale — ${opts.ticker}`,
+      opts.summary.slice(0, 500),
+      { symbol: opts.ticker, fingerprint: `form4_heavy:${opts.ticker}:${opts.summary.slice(0, 80)}` }
+    );
+  }
+  if (material.enabled && abs >= materialMin) {
+    return dispatchTyped(
+      'form4_material',
+      `Insider Form 4 — ${opts.ticker}`,
+      opts.summary.slice(0, 500),
+      { symbol: opts.ticker, fingerprint: `form4_material:${opts.ticker}:${opts.summary.slice(0, 80)}` }
+    );
+  }
+  return null;
+}
+
+export async function notifyVolumeUptick(opts: {
+  symbol: string;
+  ratio: number;
+  volume: number;
+  avg20: number;
+  asOf: string;
+}): Promise<NotifyResult | null> {
+  return dispatchTyped(
+    'volume_uptick',
+    `Volume uptick — ${opts.symbol}`,
+    `${opts.ratio.toFixed(1)}× average (${opts.volume.toLocaleString()} vs avg ${Math.round(opts.avg20).toLocaleString()}) · ${opts.asOf}`,
+    { symbol: opts.symbol, fingerprint: `volume:${opts.symbol}:${opts.asOf}` }
+  );
+}
+
+export async function notifyInsiderScan(opts: { upserted: number; lists: string[] }): Promise<NotifyResult | null> {
+  return dispatchTyped(
+    'insider_scan',
+    'OpenInsider scan complete',
+    `${opts.upserted} filings · lists ${opts.lists.join(', ')}`
+  );
 }
