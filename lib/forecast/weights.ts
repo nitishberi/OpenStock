@@ -19,6 +19,8 @@ export function createSwingBaselineV1(): ModelWeightsPayload {
     atrPct: -0.01,
     sma20Dist: -0.15,
     sma50Dist: -0.08,
+    spyRet5d: 0.12,
+    spyRet10d: 0.06,
     spyRel5d: 0.1,
     sectorRel5d: 0.08,
     dollarVolume20d: 0,
@@ -46,10 +48,20 @@ export function createSwingBaselineV1(): ModelWeightsPayload {
   const coefficients = {} as ModelWeightsPayload['coefficients'];
   for (const h of FORECAST_HORIZONS) {
     coefficients[h] = { ...baseCoef };
-    // Longer horizons lean more on slower features
+    // Longer horizons lean more on slower features + absolute SPY/sector momentum
+    if (h === 'D3') {
+      coefficients[h].spyRet5d = 0.22;
+      coefficients[h].spyRet10d = 0.12;
+      coefficients[h].sectorRel5d = 0.14;
+      coefficients[h].ret5d = 0.14;
+    }
     if (h === 'D5') {
       coefficients[h].ret21d = 0.1;
       coefficients[h].ret1d = 0.02;
+      coefficients[h].spyRet5d = 0.28;
+      coefficients[h].spyRet10d = 0.16;
+      coefficients[h].sectorRel5d = 0.18;
+      coefficients[h].ret5d = 0.16;
     }
   }
 
@@ -74,6 +86,8 @@ export const FEATURE_KEYS = [
   'atrPct',
   'sma20Dist',
   'sma50Dist',
+  'spyRet5d',
+  'spyRet10d',
   'spyRel5d',
   'sectorRel5d',
   'dollarVolume20d',
@@ -107,6 +121,8 @@ export const FEATURE_GROUP_OF: Record<FeatureKey, 'price' | 'news' | 'social' | 
   atrPct: 'price',
   sma20Dist: 'price',
   sma50Dist: 'price',
+  spyRet5d: 'price',
+  spyRet10d: 'price',
   spyRel5d: 'price',
   sectorRel5d: 'price',
   dollarVolume20d: 'price',
@@ -144,6 +160,7 @@ export function normalizeWeights(w: ModelWeightsPayload): ModelWeightsPayload {
     insiderTiltMultiplier: w.insiderTiltMultiplier ?? base.insiderTiltMultiplier,
     pressTiltMultiplier: w.pressTiltMultiplier ?? base.pressTiltMultiplier,
     eventTiltCap: w.eventTiltCap ?? base.eventTiltCap,
+    confidenceCalib: w.confidenceCalib ?? base.confidenceCalib,
   };
 }
 

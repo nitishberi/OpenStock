@@ -18,6 +18,8 @@ const FeatureSnapshotSchema = new Schema<FeatureSnapshotDoc>(
     atrPct: Number,
     sma20Dist: Number,
     sma50Dist: Number,
+    spyRet5d: Number,
+    spyRet10d: Number,
     spyRel5d: Number,
     sectorRel5d: Number,
     dollarVolume20d: Number,

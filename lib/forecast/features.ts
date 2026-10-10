@@ -115,12 +115,17 @@ export function buildMarketFeatures(
   const sma20Dist = s20 ? (last - s20) / s20 : 0;
   const sma50Dist = s50 ? (last - s50) / s50 : 0;
 
+  let spyRet5d = 0;
+  let spyRet10d = 0;
   let spyRel5d = 0;
   if (opts?.spyBars?.length) {
     const spy = barsOnOrBefore(opts.spyBars, asOfIso);
     if (spy.length >= 6) {
-      const spyRet = logRet(spy[spy.length - 6].c, spy[spy.length - 1].c);
-      spyRel5d = ret5d - spyRet;
+      spyRet5d = logRet(spy[spy.length - 6].c, spy[spy.length - 1].c);
+      spyRel5d = ret5d - spyRet5d;
+    }
+    if (spy.length >= 11) {
+      spyRet10d = logRet(spy[spy.length - 11].c, spy[spy.length - 1].c);
     }
   }
 
@@ -147,6 +152,8 @@ export function buildMarketFeatures(
     atrPct,
     sma20Dist,
     sma50Dist,
+    spyRet5d,
+    spyRet10d,
     spyRel5d,
     sectorRel5d,
     dollarVolume20d,

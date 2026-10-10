@@ -127,6 +127,7 @@ export async function runWatchlistForecastsForCron(symbols: string[]): Promise<{
     fetchDailyBars,
     forecastHorizons,
     getSectorMap,
+    sectorEtfSymbol,
     toUtcDateString,
     previousTradingDayOnOrBefore,
   } = await import('@/lib/forecast');
@@ -142,19 +143,34 @@ export async function runWatchlistForecastsForCron(symbols: string[]): Promise<{
   } catch {
     spyBars = [];
   }
+  const sectorBarsCache = new Map<string, Awaited<ReturnType<typeof fetchDailyBars>>>();
 
   let forecastCount = 0;
   for (const symbol of symbols.slice(0, 30).map((s) => s.toUpperCase())) {
     try {
       const bars = await fetchDailyBars(symbol);
+      const sector = sectorMap.get(symbol) || 'Unknown';
+      const etf = sectorEtfSymbol(sector);
+      let sectorBars: Awaited<ReturnType<typeof fetchDailyBars>> | undefined;
+      if (etf) {
+        if (!sectorBarsCache.has(etf)) {
+          try {
+            sectorBarsCache.set(etf, await fetchDailyBars(etf));
+          } catch {
+            sectorBarsCache.set(etf, []);
+          }
+        }
+        sectorBars = sectorBarsCache.get(etf);
+      }
       const media = await collectMediaFeatures(symbol, { persist: true, enrichBodies: false });
       const insider = await collectInsiderFeatures(symbol, asOf, { refreshTicker: true });
       const { features, lastClose } = assembleFeatureSnapshot({
         symbol,
         asOf,
-        sector: sectorMap.get(symbol) || 'Unknown',
+        sector,
         bars,
         spyBars,
+        sectorBars,
         news: media.news,
         social: media.social,
         press: media.press,

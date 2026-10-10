@@ -22,6 +22,7 @@ import {
   narrateAttribution,
   nextModelVersion,
   runStrategyTest,
+  sectorEtfSymbol,
   toUtcDateString,
   trainFromRows,
   previousTradingDayOnOrBefore,
@@ -85,21 +86,36 @@ export async function runWatchlistForecastsAction(symbols?: string[]): Promise<{
   } catch {
     spyBars = [];
   }
+  const sectorBarsCache = new Map<string, Awaited<ReturnType<typeof fetchDailyBars>>>();
 
   const forecasts: PriceForecastValues[] = [];
 
   for (const symbol of syms.slice(0, 20)) {
     try {
       const bars = await fetchDailyBars(symbol);
+      const sector = sectorMap.get(symbol) || 'Unknown';
+      const etf = sectorEtfSymbol(sector);
+      let sectorBars: Awaited<ReturnType<typeof fetchDailyBars>> | undefined;
+      if (etf) {
+        if (!sectorBarsCache.has(etf)) {
+          try {
+            sectorBarsCache.set(etf, await fetchDailyBars(etf));
+          } catch {
+            sectorBarsCache.set(etf, []);
+          }
+        }
+        sectorBars = sectorBarsCache.get(etf);
+      }
       const media = await collectMediaFeatures(symbol, { persist: true, enrichBodies: false });
       const insider = await collectInsiderFeatures(symbol, asOf, { refreshTicker: false });
       const evidenceUrls = [...media.evidenceUrls, ...insider.evidenceUrls];
       const { features, lastClose } = assembleFeatureSnapshot({
         symbol,
         asOf,
-        sector: sectorMap.get(symbol) || 'Unknown',
+        sector,
         bars,
         spyBars,
+        sectorBars,
         news: media.news,
         social: media.social,
         press: media.press,

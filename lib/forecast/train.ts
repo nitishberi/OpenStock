@@ -5,13 +5,14 @@
  */
 
 import type {
+  ConfidenceCalib,
   FeatureSnapshotValues,
   ForecastHorizon,
   HorizonMetrics,
   ModelWeightsPayload,
 } from './types';
 import { FORECAST_HORIZONS } from './types';
-import { FEATURE_KEYS, createSwingBaselineV1 } from './weights';
+import { FEATURE_KEYS, createSwingBaselineV1, scaleHorizonDays } from './weights';
 import { predictLogReturn } from './baseline';
 
 export interface TrainRow {
@@ -50,6 +51,13 @@ function metricsFromErrors(
     directionHitRate: dirHits.reduce((a, b) => a + b, 0) / n,
     coverage80: inside.reduce((a, b) => a + b, 0) / n,
   };
+}
+
+function sampleStdev(values: number[]): number {
+  if (values.length < 2) return values.length === 1 ? Math.abs(values[0]) : 0.01;
+  const mean = values.reduce((a, b) => a + b, 0) / values.length;
+  const v = values.reduce((a, b) => a + (b - mean) ** 2, 0) / (values.length - 1);
+  return Math.sqrt(Math.max(0, v));
 }
 
 /** Simple ridge: (X'X + λI)^{-1} X'y with intercept in last column. */
@@ -124,7 +132,7 @@ function evalWeights(
     const predDir = mu > 0.0015 ? 1 : mu < -0.0015 ? -1 : 0;
     const actDir = row.y > 0.0015 ? 1 : row.y < -0.0015 ? -1 : 0;
     const dailyVol = Math.max(0.005, row.features.vol21d / Math.sqrt(252));
-    const days = row.horizon === 'D1' ? 1 : row.horizon === 'D2' ? 2 : row.horizon === 'D3' ? 3 : 5;
+    const days = scaleHorizonDays(row.horizon);
     const half = weights.bandK[row.horizon] * dailyVol * Math.sqrt(days);
     const lo = last * Math.exp(mu - half);
     const hi = last * Math.exp(mu + half);
@@ -144,7 +152,23 @@ function evalWeights(
   return out;
 }
 
-/** Recalibrate band k so train residual coverage ≈ 80%. */
+/** Per-horizon target coverage for band k (~80%; D5 slightly higher to widen vs v2). */
+const BAND_TARGET_COVERAGE: Record<ForecastHorizon, number> = {
+  D1: 0.8,
+  D2: 0.8,
+  D3: 0.8,
+  D5: 0.82,
+};
+
+/** Floors — D5 floor widens vs historical v2 ≈1.23. */
+const BAND_K_FLOOR: Record<ForecastHorizon, number> = {
+  D1: 0.9,
+  D2: 0.95,
+  D3: 1.0,
+  D5: 1.35,
+};
+
+/** Recalibrate band k so train residual coverage ≈ 80% per horizon. */
 export function calibrateBandK(
   rows: TrainRow[],
   weights: ModelWeightsPayload
@@ -152,20 +176,43 @@ export function calibrateBandK(
   const k = { ...weights.bandK };
   for (const h of FORECAST_HORIZONS) {
     const subset = rows.filter((r) => r.horizon === h);
-    if (subset.length < 20) continue;
+    if (subset.length < 20) {
+      // Still apply D5 floor even with sparse data
+      k[h] = Math.max(BAND_K_FLOOR[h], k[h]);
+      continue;
+    }
     const absZ: number[] = [];
     for (const row of subset) {
       const { mu } = predictLogReturn(row.features, weights, h);
       const dailyVol = Math.max(0.005, row.features.vol21d / Math.sqrt(252));
-      const days = h === 'D1' ? 1 : h === 'D2' ? 2 : h === 'D3' ? 3 : 5;
+      const days = scaleHorizonDays(h);
       const z = Math.abs(row.y - mu) / (dailyVol * Math.sqrt(days));
       absZ.push(z);
     }
     absZ.sort((a, b) => a - b);
-    const idx = Math.floor(0.8 * (absZ.length - 1));
-    k[h] = Math.min(2.5, Math.max(0.8, absZ[idx] || weights.bandK[h]));
+    const target = BAND_TARGET_COVERAGE[h];
+    const idx = Math.min(absZ.length - 1, Math.max(0, Math.floor(target * (absZ.length - 1))));
+    const raw = absZ[idx] || weights.bandK[h];
+    k[h] = Math.min(2.8, Math.max(BAND_K_FLOOR[h], raw));
   }
   return k;
+}
+
+/** Fit residual-σ confidence calibration from train residuals. */
+export function fitConfidenceCalib(
+  rows: TrainRow[],
+  weights: ModelWeightsPayload
+): ConfidenceCalib {
+  const residualSigma = {} as Record<ForecastHorizon, number>;
+  for (const h of FORECAST_HORIZONS) {
+    const subset = rows.filter((r) => r.horizon === h);
+    const residuals = subset.map((r) => {
+      const { mu } = predictLogReturn(r.features, weights, h);
+      return r.y - mu;
+    });
+    residualSigma[h] = Math.max(1e-4, sampleStdev(residuals));
+  }
+  return { residualSigma };
 }
 
 export function trainFromRows(input: {
@@ -205,6 +252,7 @@ export function trainFromRows(input: {
   }
 
   candidate.bandK = calibrateBandK(trainRows, candidate);
+  candidate.confidenceCalib = fitConfidenceCalib(trainRows, candidate);
 
   const lastCloseFn = (f: FeatureSnapshotValues) => {
     // Reconstruct approximate last close from features is unavailable; use 100 placeholder

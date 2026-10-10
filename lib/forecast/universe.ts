@@ -28,3 +28,35 @@ export function getUniverseSymbols(): string[] {
 export function getSectorMap(): Map<string, string> {
   return new Map(getForecastUniverse().symbols.map((s) => [s.symbol, s.sector]));
 }
+
+/** Select SPDR sector ETF for a GICS-style sector name (for sectorRel5d). */
+export const SECTOR_ETF_BY_NAME: Record<string, string> = {
+  Technology: 'XLK',
+  'Information Technology': 'XLK',
+  Financials: 'XLF',
+  Energy: 'XLE',
+  'Health Care': 'XLV',
+  Healthcare: 'XLV',
+  Industrials: 'XLI',
+  'Consumer Discretionary': 'XLY',
+  'Consumer Staples': 'XLP',
+  Utilities: 'XLU',
+  Materials: 'XLB',
+  'Real Estate': 'XLRE',
+  'Communication Services': 'XLC',
+  Communications: 'XLC',
+};
+
+export function sectorEtfSymbol(sector: string): string | undefined {
+  return SECTOR_ETF_BY_NAME[sector];
+}
+
+/** Unique sector ETF tickers needed for a set of sector names. */
+export function sectorEtfsForSectors(sectors: Iterable<string>): string[] {
+  const out = new Set<string>();
+  for (const s of sectors) {
+    const etf = sectorEtfSymbol(s);
+    if (etf) out.add(etf);
+  }
+  return [...out];
+}

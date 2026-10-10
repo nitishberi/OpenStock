@@ -30,10 +30,20 @@ export interface MarketFeatures {
   atrPct: number;
   sma20Dist: number;
   sma50Dist: number;
+  /** Absolute SPY 5d log-return (index momentum). */
+  spyRet5d: number;
+  /** Absolute SPY 10d log-return. */
+  spyRet10d: number;
   spyRel5d: number;
   sectorRel5d: number;
   dollarVolume20d: number;
   highVolRegime: number;
+}
+
+/** Residual-σ confidence calibration persisted on trained weights. */
+export interface ConfidenceCalib {
+  /** Per-horizon train-fold residual σ of (y − μ) in log-return space. */
+  residualSigma: Record<ForecastHorizon, number>;
 }
 
 export interface NewsFeatures {
@@ -124,6 +134,8 @@ export interface ModelWeightsPayload {
   insiderTiltMultiplier: number;
   /** Band half-width = k * realizedVol * sqrt(horizonDays). */
   bandK: Record<ForecastHorizon, number>;
+  /** Residual-σ confidence params from train fold (optional on older payloads). */
+  confidenceCalib?: ConfidenceCalib;
   notes?: string;
 }
 
