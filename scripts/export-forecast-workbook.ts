@@ -304,6 +304,8 @@ async function main() {
 
       if (args.liveMedia) {
         try {
+          // --no-gemini also skips press-classify AI (heuristic only); dotenv may have set GEMINI_API_KEY
+          if (args.noGemini) delete process.env.GEMINI_API_KEY;
           const media = await collectMediaFeatures(symbol, {
             company: row.name,
             persist: false,
