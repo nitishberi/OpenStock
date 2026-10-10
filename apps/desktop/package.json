@@ -40,7 +40,7 @@
     "tsx": "^4.23.15",
     "typescript": "^5",
     "vite": "^6.2.5",
-    "vitest": "^4.1.0"
+    "vitest": "^3.2.4"
   },
   "engines": {
     "node": ">=22"
