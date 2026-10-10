@@ -2,7 +2,7 @@
 
 **Host:** Nitish Mac (darwin arm64)  
 **Completed (CPython/Scrapling vendor pass):** 2026-10-10 00:58:45 PDT (2026-10-10 07:58:45 UTC)  
-**Repo / branch:** https://github.com/nitishberi/OpenStock `cursor/macos-dmg-autodaytrader-cee4` @ `1f2c003`  
+**Repo / branch:** https://github.com/nitishberi/OpenStock `cursor/macos-dmg-autodaytrader-cee4` @ `3194a2e`  
 **PR:** https://github.com/nitishberi/OpenStock/pull/9  
 **Local clone:** `/Volumes/MacOSX/OpenStock-work/OpenStock`
 
