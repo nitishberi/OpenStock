@@ -17,6 +17,14 @@ echo "==> Assembling ${APP}"
 rm -rf "${APP}"
 mkdir -p "${MACOS}" "${RES}/app" "${RES}/node" "${RES}/python" "${RES}/scrapling-worker"
 
+# Prefer vendored Node (from vendor-runtimes.sh) so native addons match the
+# bundled runtime — Homebrew Node 26+ breaks better-sqlite3 prebuilds.
+VENDOR_NODE_BIN="${DIST}/vendor/node/bin"
+if [[ -x "${VENDOR_NODE_BIN}/node" ]]; then
+  export PATH="${VENDOR_NODE_BIN}:${PATH}"
+  echo "    Using vendored Node $($VENDOR_NODE_BIN/node -v)"
+fi
+
 # Build desktop app
 (
   cd "${DESKTOP}"
@@ -26,6 +34,8 @@ mkdir -p "${MACOS}" "${RES}/app" "${RES}/node" "${RES}/python" "${RES}/scrapling
   mkdir -p dist/server-src
   cp -R src/server/. dist/server-src/
   cp package.json tsconfig.json tsconfig.server.json vitest.config.ts dist/ 2>/dev/null || true
+  # Ship lockfile so first-run / host packs can npm ci --omit=dev against Node 22
+  cp package-lock.json dist/ 2>/dev/null || true
 )
 
 # Copy app payload
@@ -33,6 +43,7 @@ rsync -a --delete "${DESKTOP}/dist/client/" "${RES}/app/client/"
 rsync -a --delete "${DESKTOP}/src/server/" "${RES}/app/server/"
 cp "${DESKTOP}/package.json" "${RES}/app/"
 cp "${DESKTOP}/tsconfig.json" "${RES}/app/"
+cp "${DESKTOP}/package-lock.json" "${RES}/app/" 2>/dev/null || true
 # Shared OpenStock forecast libs (read-only slice)
 mkdir -p "${RES}/app/lib" "${RES}/app/config"
 rsync -a "${ROOT}/lib/forecast/" "${RES}/app/lib/forecast/"
