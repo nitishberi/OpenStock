@@ -95,12 +95,13 @@ if [[ ! -x "${NODE_BIN}" ]]; then
 fi
 
 cd "${RES}/app"
+export AUTODAYTRADER_LIB_ROOT="${RES}/app"
 # Install production deps into Resources on first run if missing
 if [[ ! -d node_modules ]]; then
-  npm ci --omit=dev --ignore-scripts 2>/dev/null || npm install --omit=dev
+  npm ci --omit=dev 2>/dev/null || npm install --omit=dev --legacy-peer-deps
 fi
 
-# Prefer tsx for TS + path aliases
+# Prefer tsx so TypeScript server + forecast .ts libs load
 if [[ -x node_modules/.bin/tsx ]]; then
   exec "${NODE_BIN}" node_modules/.bin/tsx server/index.ts
 fi

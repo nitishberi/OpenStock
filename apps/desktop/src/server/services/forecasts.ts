@@ -2,6 +2,7 @@ import { getDb, nowIso } from '../db/index.js';
 import type { DesktopConfig } from '../config.js';
 import { ensureActiveWeights, writeWeightsToDisk, type WeightsPayload } from './weights-store.js';
 import { notifyForecastRefresh } from './notify.js';
+import { importForecast } from '../libpath.js';
 
 /**
  * Desktop forecast orchestration.
@@ -52,32 +53,38 @@ async function loadForecastLib(): Promise<{
   emptyInsiderFeatures: () => Record<string, number>;
 } | null> {
   try {
-    // Path alias @/ resolved by tsx via apps/desktop/tsconfig.json
-    const weights = await import('../../../../../lib/forecast/weights.ts');
-    const calendar = await import('../../../../../lib/forecast/calendar.ts');
-    const universe = await import('../../../../../lib/forecast/universe.ts');
-    const bars = await import('../../../../../lib/forecast/bars.ts');
-    const features = await import('../../../../../lib/forecast/features.ts');
-    const baseline = await import('../../../../../lib/forecast/baseline.ts');
-    const insider = await import('../../../../../lib/forecast/insider.ts');
-    let media: { collectMediaFeatures?: Function } = {};
+    const weights = await importForecast('weights');
+    const calendar = await importForecast('calendar');
+    const universe = await importForecast('universe');
+    const bars = await importForecast('bars');
+    const features = await importForecast('features');
+    const baseline = await importForecast('baseline');
+    const insider = await importForecast('insider');
+    let media: Record<string, unknown> = {};
     try {
-      media = await import('../../../../../lib/forecast/media.ts');
+      media = await importForecast('media');
     } catch {
       /* media optional without mongo */
     }
     return {
-      createSwingBaselineV1: weights.createSwingBaselineV1,
-      createSwingBaselineV3: (weights as { createSwingBaselineV3?: () => WeightsPayload })
-        .createSwingBaselineV3,
-      toUtcDateString: calendar.toUtcDateString,
-      previousTradingDayOnOrBefore: calendar.previousTradingDayOnOrBefore,
-      getForecastUniverse: universe.getForecastUniverse,
-      getSectorMap: universe.getSectorMap,
-      sectorEtfSymbol: universe.sectorEtfSymbol,
-      fetchDailyBars: bars.fetchDailyBars,
-      assembleFeatureSnapshot: features.assembleFeatureSnapshot,
-      forecastHorizons: baseline.forecastHorizons,
+      createSwingBaselineV1: weights.createSwingBaselineV1 as () => WeightsPayload,
+      createSwingBaselineV3: weights.createSwingBaselineV3 as (() => WeightsPayload) | undefined,
+      toUtcDateString: calendar.toUtcDateString as (d: Date) => string,
+      previousTradingDayOnOrBefore: calendar.previousTradingDayOnOrBefore as (d: Date) => Date,
+      getForecastUniverse: universe.getForecastUniverse as () => {
+        symbols: Array<{ symbol: string }>;
+        count: number;
+      },
+      getSectorMap: universe.getSectorMap as () => Map<string, string>,
+      sectorEtfSymbol: universe.sectorEtfSymbol as (sector: string) => string | undefined,
+      fetchDailyBars: bars.fetchDailyBars as (
+        symbol: string
+      ) => Promise<Array<{ date: string; close: number }>>,
+      assembleFeatureSnapshot: features.assembleFeatureSnapshot as (input: Record<string, unknown>) => {
+        features: Record<string, unknown>;
+        lastClose: number;
+      },
+      forecastHorizons: baseline.forecastHorizons as (input: Record<string, unknown>) => ForecastRow[],
       collectMediaFeatures: media.collectMediaFeatures as
         | ((symbol: string, opts?: Record<string, unknown>) => Promise<{
             news: unknown;
@@ -86,8 +93,14 @@ async function loadForecastLib(): Promise<{
             evidenceUrls: string[];
           }>)
         | undefined,
-      collectInsiderFeatures: insider.collectInsiderFeatures,
-      emptyInsiderFeatures: insider.emptyInsiderFeatures,
+      collectInsiderFeatures: insider.collectInsiderFeatures as
+        | ((
+            symbol: string,
+            asOf: string,
+            opts?: Record<string, unknown>
+          ) => Promise<{ features: Record<string, unknown>; evidenceUrls: string[] }>)
+        | undefined,
+      emptyInsiderFeatures: insider.emptyInsiderFeatures as () => Record<string, number>,
     };
   } catch (e) {
     console.warn('[forecasts] OpenStock lib unavailable, using stub', e);

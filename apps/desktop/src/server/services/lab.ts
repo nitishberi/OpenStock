@@ -4,6 +4,7 @@ import path from 'node:path';
 import { getDb, nowIso } from '../db/index.js';
 import type { DesktopConfig } from '../config.js';
 import { ensureActiveWeights, upsertWeights, writeWeightsToDisk, type WeightsPayload } from './weights-store.js';
+import { importForecast, openStockRoot } from '../libpath.js';
 
 export type LabData = {
   activeVersion: string;
@@ -46,7 +47,7 @@ export function getLabData(cfg: DesktopConfig): LabData {
   let universeCount = 100;
   try {
     const candidates = [
-      path.resolve(process.cwd(), '../../config/forecast-universe-100.json'),
+      path.join(openStockRoot(), 'config', 'forecast-universe-100.json'),
       path.resolve(process.cwd(), 'config/forecast-universe-100.json'),
     ];
     for (const p of candidates) {
@@ -90,14 +91,14 @@ export async function runStrategyTest(
   try {
     let result: { summary: unknown; holdoutAsOfs: string[]; rows: unknown[] };
     try {
-      const mod = await import('../../../../../lib/forecast/strategy-test.ts');
-      result = await mod.runStrategyTest({
+      const mod = await importForecast('strategy-test');
+      result = (await (mod.runStrategyTest as Function)({
         weights,
         symbolLimit: opts.symbolLimit,
         windowDays: opts.windowDays ?? 120,
         liveMedia: opts.liveMedia ?? false,
         delayMs: 200,
-      });
+      })) as { summary: unknown; holdoutAsOfs: string[]; rows: unknown[] };
     } catch (e) {
       console.warn('[lab] strategy-test lib failed; writing smoke summary', e);
       result = {
@@ -162,8 +163,8 @@ export async function trainAndPromote(
   if (!evalDoc) throw Object.assign(new Error('No completed eval run'), { status: 400 });
 
   try {
-    const trainMod = await import('../../../../../lib/forecast/train.ts');
-    const weightsMod = await import('../../../../../lib/forecast/weights.ts');
+    const trainMod = await importForecast('train');
+    const weightsMod = await importForecast('weights');
 
     const resolved = db
       .prepare(
