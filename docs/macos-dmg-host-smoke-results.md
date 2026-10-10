@@ -3,7 +3,7 @@
 **Host:** Nitish Mac (darwin arm64)  
 **Completed:** 2026-10-10 00:47:43 PDT  
 **Cert recheck:** 2026-10-10 00:48:48 PDT (2026-10-10 07:48:48 UTC) — still only Apple Development (no Developer ID Application)  
-**Repo / branch:** https://github.com/nitishberi/OpenStock `cursor/macos-dmg-autodaytrader-cee4` @ `ce053d5`  
+**Repo / branch:** https://github.com/nitishberi/OpenStock `cursor/macos-dmg-autodaytrader-cee4` @ `a85db67`  
 **PR:** https://github.com/nitishberi/OpenStock/pull/9  
 **Local clone:** `/Volumes/MacOSX/OpenStock-work/OpenStock`
 
