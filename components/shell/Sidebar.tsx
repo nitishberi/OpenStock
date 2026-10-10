@@ -3,7 +3,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
-import { BookOpen, Bot, Code2, Heart, Info, LayoutDashboard, LifeBuoy, LogOut, LineChart, Search, Star } from "lucide-react";
+import { BookOpen, Bot, CandlestickChart, Code2, Heart, Info, LayoutDashboard, LifeBuoy, LogOut, LineChart, Search, Star } from "lucide-react";
 import { openSearch } from "@/components/SearchCommand";
 import { signOut } from "@/lib/actions/auth.actions";
 import { cn } from "@/lib/utils";
@@ -58,6 +58,12 @@ const Sidebar = ({ user, watchlist }: SidebarProps) => {
                     className={cn('side-item', (pathname === '/forecasts' || pathname?.startsWith('/forecasts/')) && 'is-active')}
                 >
                     <LineChart /> Forecasts
+                </Link>
+                <Link
+                    href="/order-blocks"
+                    className={cn('side-item', pathname === '/order-blocks' && 'is-active')}
+                >
+                    <CandlestickChart /> Order Blocks
                 </Link>
                 {tradingUiEnabled && (
                     <Link href="/bot" className={cn('side-item', pathname === '/bot' && 'is-active')}>

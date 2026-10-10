@@ -1,0 +1,20 @@
+feature,area,priority,original,clone,notes
+Bullish ranked board,board,must,yes,yes,US forecast universe
+Bearish ranked board,board,must,yes,yes,
+Strength score (move/ATR),board,must,yes,yes,clean-room: close-open over ATR20
+Top picks with sector cap,board,must,yes,yes,max 2 per sector; top 3
+Order block zone on symbol,zones,must,yes,yes,last opposite candle before impulse
+Liquidity level,zones,must,yes,yes,swing high/low in trade direction
+Invalidation S1/R1,zones,must,yes,yes,
+Market breadth counts,market,must,yes,yes,
+Sector flow averages,market,should,yes,yes,
+Detail panel / popup chart levels,zones,must,yes,yes,price levels; sparkline optional
+Refresh board,ops,must,yes,yes,on-demand not every minute
+Nav entry Order Blocks,shell,must,yes,yes,
+Link from Forecasts symbol,shell,should,yes,yes,
+Dark terminal calm layout,ui,should,yes,yes,match OpenStock tokens not their brand
+Auth Google/WhatsApp guest,auth,skip,yes,skip,use existing OpenStock auth
+Trading journal,journal,skip,yes,skip,
+Learning videos / community,growth,skip,yes,skip,
+INR subscription billing,payments,skip,yes,skip,
+Indian F&O + OI liquidity score,data,skip,yes,skip,no OI; volume/swing proxy only
