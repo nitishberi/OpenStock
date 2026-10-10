@@ -16,6 +16,7 @@
     "strategy-test:smoke:live": "npx tsx scripts/strategy-test-swing.ts --smoke --live-media",
     "strategy-test:live": "npx tsx scripts/strategy-test-swing.ts --live-media",
     "export-forecast-workbook": "npx tsx scripts/export-forecast-workbook.ts",
+    "ingest-forecast-workbook": "npx tsx scripts/ingest-forecast-workbook.ts",
     "worker:dev": "cd services/scrapling-worker && uvicorn main:app --reload --port 8091"
   },
   "dependencies": {

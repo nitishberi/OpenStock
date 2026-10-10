@@ -216,6 +216,7 @@ async function main() {
   const {
     getForecastUniverse,
     getSectorMap,
+    sectorEtfSymbol,
     previousTradingDayOnOrBefore,
     toUtcDateString,
     addTradingDays,
@@ -265,6 +266,8 @@ async function main() {
     }
   }
 
+  const sectorBarsCache = new Map<string, Awaited<ReturnType<typeof fetchDailyBars>>>();
+
   type StockBundle = {
     symbol: string;
     name: string;
@@ -301,6 +304,8 @@ async function main() {
 
       if (args.liveMedia) {
         try {
+          // --no-gemini also skips press-classify AI (heuristic only); dotenv may have set GEMINI_API_KEY
+          if (args.noGemini) delete process.env.GEMINI_API_KEY;
           const media = await collectMediaFeatures(symbol, {
             company: row.name,
             persist: false,
@@ -318,7 +323,10 @@ async function main() {
       }
 
       try {
-        const pack = await collectInsiderFeatures(symbol, asOf, { refreshTicker: false });
+        // Force OpenInsider refresh when exporting with --live-media
+        const pack = await collectInsiderFeatures(symbol, asOf, {
+          refreshTicker: Boolean(args.liveMedia),
+        });
         insider = pack.features;
         insiderEvidence = pack.evidenceLine;
         evidenceUrls = [...evidenceUrls, ...pack.evidenceUrls];
@@ -329,12 +337,28 @@ async function main() {
         /* zeros */
       }
 
+      const sector = sectorMap.get(symbol) || row.sector || 'Unknown';
+      const etf = sectorEtfSymbol(sector);
+      let sectorBars: Awaited<ReturnType<typeof fetchDailyBars>> | undefined;
+      if (etf) {
+        if (!sectorBarsCache.has(etf)) {
+          try {
+            sectorBarsCache.set(etf, await fetchDailyBars(etf));
+            await sleep(200);
+          } catch {
+            sectorBarsCache.set(etf, []);
+          }
+        }
+        sectorBars = sectorBarsCache.get(etf);
+      }
+
       const { features, lastClose } = assembleFeatureSnapshot({
         symbol,
         asOf,
-        sector: sectorMap.get(symbol) || row.sector || 'Unknown',
+        sector,
         bars,
         spyBars,
+        sectorBars,
         news,
         social,
         press,
@@ -499,9 +523,10 @@ async function main() {
     '',
     'Re-ingest / training plan',
     '1) After D5 target dates have closed (end of next week), fill Actual close for all 50 × 4 horizon rows.',
-    '2) Run resolve + train in the app (Forecast Lab → resolve due forecasts / train) or a CLI that reads this workbook.',
-    '3) Future CLI: parse each ticker sheet, upsert PriceForecast status=resolved with actualClose, then trainFromRows → promote candidate.',
-    '4) Keep this file immutable for the asOf cohort; copy to a dated archive before editing actuals if needed.',
+    '2) Ingest CLI: npm run ingest-forecast-workbook -- --file=/path/to/filled.xlsx',
+    '   → upserts PriceForecast status=resolved with actualClose/errors; rebuilds FeatureSnapshot from bars ≤ asOf when missing (no lookahead).',
+    '3) Run strategy-test / Lab Train (trainFromRows) including the ingested cohort; promote only if holdout gate passes.',
+    '4) Archive a dated copy of this filled workbook under docs/exports/ before the next cohort export.',
     '',
     'Notes',
     '- Predictions are closing prices, not trade signals. Live trading is disabled.',
@@ -668,8 +693,8 @@ After each horizon’s **Target date** session closes (through end of next week 
 ## Re-ingest / training plan (end of next week)
 
 1. Complete Actual close for all successful tickers × horizons D1–D5.
-2. Resolve in-app (\`resolveDueForecastsAction\` / Forecast Lab) **or** parse this workbook and upsert \`PriceForecast\` rows with \`status: resolved\`, \`actualClose\`, error fields.
-3. Run \`trainFromRows\` / Lab **Train** against the resolved cohort + prior strategy-test rows; promote only if the holdout gate passes (prefer keeping \`swing-baseline-v2\` lineage).
+2. Ingest: \`npm run ingest-forecast-workbook -- --file=docs/exports/forecast-50-stocks-d1d5.xlsx\` (upserts resolved \`PriceForecast\` + feature snapshots without lookahead).
+3. Run \`trainFromRows\` / Lab **Train** against the resolved cohort + prior strategy-test rows; promote only if the holdout gate passes.
 4. Archive a copy of the filled workbook under \`docs/exports/\` with a dated name before the next cohort export.
 
 ## Notes

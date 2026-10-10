@@ -14,7 +14,7 @@ import {
 } from './features';
 import { emptyInsiderFeatures, featuresFromInsiderFilings, type InsiderFilingLike } from './insider';
 import { forecastHorizons } from './baseline';
-import { getForecastUniverse, getSectorMap } from './universe';
+import { getForecastUniverse, getSectorMap, sectorEtfSymbol, sectorEtfsForSectors } from './universe';
 import type {
   FeatureSnapshotValues,
   ForecastHorizon,
@@ -107,6 +107,24 @@ export async function runStrategyTest(opts: StrategyTestOptions): Promise<Strate
     }
   }
 
+  // Prefetch sector ETFs so sectorRel5d is non-zero
+  const neededSectors = symbols.map((s) => sectorMap.get(s) || 'Unknown');
+  const etfTickers = sectorEtfsForSectors(neededSectors);
+  const sectorBarsByEtf = new Map<string, OhlcvBar[]>();
+  opts.onProgress?.(`Loading ${etfTickers.length} sector ETFs for relative features…`);
+  for (const etf of etfTickers) {
+    let bars = barsBySymbol.get(etf);
+    if (!bars?.length) {
+      try {
+        bars = await fetchDailyBars(etf);
+        if (opts.delayMs) await new Promise((r) => setTimeout(r, Math.min(200, opts.delayMs)));
+      } catch {
+        bars = [];
+      }
+    }
+    sectorBarsByEtf.set(etf, bars || []);
+  }
+
   // Align walk-forward end to last available market bar (VM clocks can be ahead of real tape).
   let end = opts.endDate || toUtcDateString(new Date());
   if (!opts.endDate) {
@@ -138,8 +156,7 @@ export async function runStrategyTest(opts: StrategyTestOptions): Promise<Strate
     D5: { abs: [], pct: [], sq: [], dir: [], inside: [] },
   };
 
-  // Live media for full 100×120 is too expensive; strategy test defaults to price-only + frozen zeros
-  // unless liveMedia is true (then only fetch media for the latest asOf per symbol).
+  // Live media: latest asOf AND every 5th historical asOf (bounded cost).
   const mediaCache = new Map<string, Awaited<ReturnType<typeof import('./media').collectMediaFeatures>>>();
 
   for (const symbol of symbols) {
@@ -149,8 +166,11 @@ export async function runStrategyTest(opts: StrategyTestOptions): Promise<Strate
       continue;
     }
     const sector = sectorMap.get(symbol) || 'Unknown';
+    const etf = sectorEtfSymbol(sector);
+    const sectorBars = etf ? sectorBarsByEtf.get(etf) : undefined;
 
-    for (const asOf of asOfUsable) {
+    for (let asOfIdx = 0; asOfIdx < asOfUsable.length; asOfIdx++) {
+      const asOf = asOfUsable[asOfIdx];
       const hist = barsOnOrBefore(bars, asOf);
       if (hist.length < 30) continue;
 
@@ -164,13 +184,18 @@ export async function runStrategyTest(opts: StrategyTestOptions): Promise<Strate
         insider = featuresFromInsiderFilings(opts.insiderBySymbol.get(symbol) || [], asOf);
       }
 
-      if (opts.liveMedia && asOf === asOfUsable[asOfUsable.length - 1]) {
+      const isLatestAsOf = asOfIdx === asOfUsable.length - 1;
+      const isEveryFifth = asOfIdx % 5 === 0;
+      const sampleLiveMedia = Boolean(opts.liveMedia && (isLatestAsOf || isEveryFifth));
+
+      if (sampleLiveMedia) {
+        const mediaKey = `${symbol}:${asOf}`;
         try {
-          if (!mediaCache.has(symbol)) {
+          if (!mediaCache.has(mediaKey)) {
             const { collectMediaFeatures } = await import('./media');
-            mediaCache.set(symbol, await collectMediaFeatures(symbol, { persist: false }));
+            mediaCache.set(mediaKey, await collectMediaFeatures(symbol, { persist: false }));
           }
-          const m = mediaCache.get(symbol)!;
+          const m = mediaCache.get(mediaKey)!;
           news = m.news;
           social = m.social;
           press = m.press;
@@ -180,7 +205,9 @@ export async function runStrategyTest(opts: StrategyTestOptions): Promise<Strate
         }
         try {
           const { collectInsiderFeatures } = await import('./insider');
-          const pack = await collectInsiderFeatures(symbol, asOf, { refreshTicker: false });
+          const pack = await collectInsiderFeatures(symbol, asOf, {
+            refreshTicker: Boolean(opts.liveMedia && isLatestAsOf),
+          });
           insider = pack.features;
           evidenceUrls = [...evidenceUrls, ...pack.evidenceUrls];
         } catch {
@@ -196,6 +223,7 @@ export async function runStrategyTest(opts: StrategyTestOptions): Promise<Strate
           sector,
           bars,
           spyBars,
+          sectorBars,
           news,
           social,
           press,
