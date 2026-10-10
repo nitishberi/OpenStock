@@ -20,11 +20,11 @@ AutoDayTrader.app/Contents/Resources/
 
 ## Steps (run by `scripts/macos/vendor-runtimes.sh`)
 
-1. Download Node 22 **darwin-arm64** tarball into `Resources/node`.
-2. Download python-build-standalone (or python.org macOS installer extract) arm64 into `Resources/python`.
-3. Create a venv with that interpreter, `pip install -r services/scrapling-worker/requirements.txt`.
-4. Copy worker sources + venv `site-packages` (or the whole venv) into `Resources/scrapling-worker`.
-5. Set `APP_TOKEN` / `SCRAPLING_WORKER_TOKEN` at runtime from Keychain (never bake secrets into the bundle).
+1. Download Node 22 **darwin-arm64** tarball into `dist/macos/vendor/node`.
+2. Download python-build-standalone **aarch64-apple-darwin-install_only** into `dist/macos/vendor/python` (`bin/python3`).
+3. `pip install -r services/scrapling-worker/requirements.txt` into that interpreter’s site-packages (so `Resources/python/bin/python3 -c "import scrapling"` works after assemble).
+4. `assemble-app.sh` copies vendor Node/Python plus `services/scrapling-worker` sources into `Resources/`.
+5. Set `SCRAPLING_WORKER_TOKEN` at runtime from Keychain (never bake secrets into the bundle). Override PBS release with `PBS_TAG` / `PBS_VERSION` if needed.
 
 ## Runtime interface
 
